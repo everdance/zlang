@@ -40,7 +40,7 @@ fn get_token(c: char, iter: &mut Peekable<CharIndices<'_>>) -> Option<TokenKind>
         '*' => Some(Star),
         '!' | '=' | '>' | '<' => Some(equal_token(c, iter)),
         '"' => Some(get_string(iter)),
-        '0'..='9' => Some(get_number(iter)),
+        '0'..='9' => Some(get_number(c, iter)),
         'A'..='Z' | 'a'..='z' => Some(get_word(c, iter)),
 
         _ => None,
@@ -48,11 +48,36 @@ fn get_token(c: char, iter: &mut Peekable<CharIndices<'_>>) -> Option<TokenKind>
 }
 
 fn get_string(iter: &mut Peekable<CharIndices<'_>>) -> TokenKind {
-    StrLiteral("d".to_string())
+    let mut s = vec![];
+
+    loop {
+        if let Some((_, c)) = iter.next() {
+            if c == '"' {
+                // TODO: escape case
+                break;
+            }
+            s.push(c);
+        }
+    }
+
+    StrLiteral(String::from_iter(s))
 }
 
-fn get_number(iter: &mut Peekable<CharIndices<'_>>) -> TokenKind {
-    NumLiteral(12.98)
+fn get_number(start: char, iter: &mut Peekable<CharIndices<'_>>) -> TokenKind {
+    let mut s = vec![start];
+
+    loop {
+        if let Some((_, c)) = iter.next() {
+            if !c.is_numeric() || c != '.' {
+                break;
+            }
+            s.push(c);
+        } else {
+            break;
+        }
+    }
+
+    NumLiteral(String::from_iter(s).parse::<f64>().expect("number"))
 }
 
 fn get_word(start: char, iter: &mut Peekable<CharIndices<'_>>) -> TokenKind {
