@@ -1,7 +1,7 @@
 pub struct Token {
-    kind: TokenKind,
-    line: i32,
-    col: i32,
+    pub kind: TokenKind,
+    pub line: usize,
+    pub pos: usize,
 }
 
 pub enum TokenKind {
