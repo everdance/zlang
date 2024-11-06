@@ -157,3 +157,47 @@ fn equal_token(c: char, iter: &mut Peekable<CharIndices<'_>>) -> TokenKind {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scan() {
+        let s = "var x = 1";
+        let tokens = parse(s).expect("no error");
+        assert_eq!(tokens.len(), 4);
+        assert_eq!(
+            tokens[0],
+            Token {
+                kind: Var,
+                pos: 0,
+                line: 0
+            }
+        );
+        assert_eq!(
+            tokens[1],
+            Token {
+                kind: Identifier("x".to_string()),
+                pos: 4,
+                line: 0
+            }
+        );
+        assert_eq!(
+            tokens[2],
+            Token {
+                kind: Equal,
+                pos: 6,
+                line: 0
+            }
+        );
+        assert_eq!(
+            tokens[3],
+            Token {
+                kind: NumLiteral(1.0),
+                pos: 8,
+                line: 0
+            }
+        );
+    }
+}
