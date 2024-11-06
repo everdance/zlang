@@ -49,6 +49,4 @@ pub enum TokenKind {
     True,
     Var,
     While,
-
-    Comment,
 }
