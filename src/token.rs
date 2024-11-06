@@ -1,9 +1,11 @@
+#[derive(Debug)]
 pub struct Token {
     pub kind: TokenKind,
     pub line: usize,
     pub pos: usize,
 }
 
+#[derive(Debug)]
 pub enum TokenKind {
     LeftParen,
     RightParen,

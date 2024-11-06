@@ -2,7 +2,7 @@ use std::{iter::Peekable, str::CharIndices, usize};
 
 use crate::token::{TokenKind::*, *};
 
-pub fn parse(s: &String) -> Result<Vec<Token>, String> {
+pub fn parse(s: &str) -> Result<Vec<Token>, String> {
     let mut tokens: Vec<Token> = Vec::new();
     let mut iter = s.char_indices().peekable();
     let mut line: usize = 0;
