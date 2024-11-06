@@ -36,7 +36,7 @@ fn get_token(c: char, iter: &mut Peekable<CharIndices<'_>>) -> Option<TokenKind>
         '-' => Some(Minus),
         '+' => Some(Plus),
         ';' => Some(Semicolon),
-        '/' => Some(Slash), // TODO: support comments
+        '/' => Some(slash(iter)),
         '*' => Some(Star),
         '!' | '=' | '>' | '<' => Some(equal_token(c, iter)),
         '"' => Some(get_string(iter)),
@@ -52,8 +52,7 @@ fn get_string(iter: &mut Peekable<CharIndices<'_>>) -> TokenKind {
 
     loop {
         if let Some((_, c)) = iter.next() {
-            if c == '"' {
-                // TODO: escape case
+            if c == '"' && *s.last().unwrap_or(&'\0') != BACKSLASH {
                 break;
             }
             s.push(c);
@@ -61,6 +60,23 @@ fn get_string(iter: &mut Peekable<CharIndices<'_>>) -> TokenKind {
     }
 
     StrLiteral(String::from_iter(s))
+}
+
+fn slash(iter: &mut Peekable<CharIndices<'_>>) -> TokenKind {
+    // discard comments
+    if let Some((_, c)) = iter.peek() {
+        if *c == '/' {
+            loop {
+                if let Some((_, c)) = iter.next() {
+                    if c == '\n' {
+                        break;
+                    }
+                }
+            }
+            return Comment;
+        }
+    }
+    Slash
 }
 
 fn get_number(start: char, iter: &mut Peekable<CharIndices<'_>>) -> TokenKind {

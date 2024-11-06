@@ -1,3 +1,5 @@
+pub const BACKSLASH: char = '\\';
+
 #[derive(Debug, PartialEq)]
 pub struct Token {
     pub kind: TokenKind,
@@ -47,4 +49,6 @@ pub enum TokenKind {
     True,
     Var,
     While,
+
+    Comment,
 }
