@@ -56,6 +56,8 @@ fn get_string(iter: &mut Peekable<CharIndices<'_>>) -> TokenKind {
                 break;
             }
             s.push(c);
+        } else {
+            break;
         }
     }
 
@@ -71,6 +73,8 @@ fn slash(iter: &mut Peekable<CharIndices<'_>>) -> TokenKind {
                     if c == '\n' {
                         break;
                     }
+                } else {
+                    break;
                 }
             }
             return Comment;
@@ -83,11 +87,12 @@ fn get_number(start: char, iter: &mut Peekable<CharIndices<'_>>) -> TokenKind {
     let mut s = vec![start];
 
     loop {
-        if let Some((_, c)) = iter.next() {
-            if !c.is_numeric() || c != '.' {
+        if let Some((_, c)) = iter.peek() {
+            if !c.is_numeric() || *c != '.' {
                 break;
             }
-            s.push(c);
+            let (_, ch) = iter.next().unwrap();
+            s.push(ch);
         } else {
             break;
         }
@@ -100,11 +105,12 @@ fn get_word(start: char, iter: &mut Peekable<CharIndices<'_>>) -> TokenKind {
     let mut s = vec![start];
 
     loop {
-        if let Some((_, c)) = iter.next() {
+        if let Some((_, c)) = iter.peek() {
             if !c.is_alphanumeric() {
                 break;
             }
-            s.push(c);
+            let (_, ch) = iter.next().unwrap();
+            s.push(ch);
         } else {
             break;
         }
