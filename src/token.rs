@@ -1,5 +1,3 @@
-pub const BACKSLASH: char = '\\';
-
 #[derive(Debug, PartialEq)]
 pub struct Token {
     pub kind: TokenKind,

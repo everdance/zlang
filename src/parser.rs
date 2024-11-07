@@ -2,6 +2,65 @@ use std::{iter::Peekable, str::CharIndices, usize};
 
 use crate::token::{TokenKind::*, *};
 
+pub struct Scanner;
+
+impl Scanner {
+    fn scan(&self, s: &str) -> Vec<Token> {
+        let mut state = ScanState {
+            iter: &mut s.char_indices().peekable(),
+            tokens: vec![],
+            issues: vec![],
+        };
+
+        state.scan();
+        state.tokens
+    }
+}
+
+pub struct ScanIssue {
+    pub line: usize,
+    pub offset: usize,
+    pub message: String,
+}
+
+struct ScanState<'a> {
+    iter: &'a mut Peekable<CharIndices<'a>>,
+    tokens: Vec<Token>,
+    issues: Vec<ScanIssue>,
+    line: usize,
+    offset: usize,
+}
+
+impl ScanState<'_> {
+    fn scan(&mut self) {
+        loop {
+            match self.iter.next() {
+                Some((pos, c)) => match c {
+                    '\n' => self.line += 1,
+                    '\t' | '\r' | ' ' => (),
+                    _ => match self.get_token(c) {
+                        Ok(kind) => self.tokens.push(Token {
+                            kind,
+                            pos,
+                            line: self.line,
+                        }),
+                        Err(err) => self.issues.push(ScanIssue {
+                            line: self.line,
+                            offset: self.offset,
+                            message: err,
+                        }),
+                    },
+                },
+                _ => break,
+            }
+        }
+    }
+
+    fn get_token(&mut self, c: char) -> Result<TokenKind, String> {
+        Err(format!("not implemented"))
+    }
+}
+
 pub fn parse(s: &str) -> Vec<Token> {
     let mut tokens: Vec<Token> = Vec::new();
     let mut iter = s.char_indices().peekable();
@@ -35,9 +94,9 @@ fn get_token(c: char, iter: &mut Peekable<CharIndices<'_>>) -> Result<TokenKind,
         '-' => Ok(Minus),
         '+' => Ok(Plus),
         ';' => Ok(Semicolon),
-        '/' => slash(iter),
         '*' => Ok(Star),
         '!' | '=' | '>' | '<' => Ok(equal_token(c, iter)),
+        '/' => slash(iter),
         '"' => get_string(iter),
         '0'..='9' => get_number(c, iter),
         'A'..='Z' | 'a'..='z' => get_identifer(c, iter),
@@ -51,7 +110,7 @@ fn get_string(iter: &mut Peekable<CharIndices<'_>>) -> Result<TokenKind, String>
 
     loop {
         if let Some((_, c)) = iter.next() {
-            if c == '"' && *s.last().unwrap_or(&'\0') != BACKSLASH {
+            if c == '"' && *s.last().unwrap_or(&'\0') != '\\' {
                 break;
             }
             s.push(c);
@@ -96,7 +155,7 @@ fn get_number(start: char, iter: &mut Peekable<CharIndices<'_>>) -> Result<Token
                     let (_, ch) = iter.next().unwrap();
                     s.push(ch);
                 }
-                '\t' | ' ' | '%' | '&' | ':'..='?' | '('..='/' => break,
+                '\t' | ' ' | '%' | '&' | '|' | ':'..='?' | '('..='/' => break,
                 _ => {
                     let num = String::from_iter(s);
                     return Err(format!("unexpected char '{c}' after '{num}'"));
