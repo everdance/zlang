@@ -10,6 +10,8 @@ impl Scanner {
             iter: &mut s.char_indices().peekable(),
             tokens: vec![],
             issues: vec![],
+            line: 0,
+            offset: 0,
         };
 
         state.scan();
