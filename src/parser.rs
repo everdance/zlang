@@ -2,7 +2,7 @@ use std::{iter::Peekable, str::CharIndices, usize};
 
 use crate::token::{TokenKind::*, *};
 
-pub fn parse(s: &str) -> Result<Vec<Token>, String> {
+pub fn parse(s: &str) -> Vec<Token> {
     let mut tokens: Vec<Token> = Vec::new();
     let mut iter = s.char_indices().peekable();
     let mut line: usize = 0;
@@ -11,43 +11,42 @@ pub fn parse(s: &str) -> Result<Vec<Token>, String> {
         match iter.next() {
             Some((pos, c)) => match c {
                 '\n' => line += 1,
-                '\t' | ' ' => (),
-                _ => {
-                    if let Some(kind) = get_token(c, &mut iter) {
-                        tokens.push(Token { kind, pos, line })
-                    }
-                }
+                '\t' | '\r' | ' ' => (),
+                _ => match get_token(c, &mut iter) {
+                    Ok(kind) => tokens.push(Token { kind, pos, line }),
+                    Err(err) => panic!("{err} - line: {line} offset: {pos}"),
+                },
             },
             _ => break,
         }
     }
 
-    Ok(tokens)
+    tokens
 }
 
-fn get_token(c: char, iter: &mut Peekable<CharIndices<'_>>) -> Option<TokenKind> {
+fn get_token(c: char, iter: &mut Peekable<CharIndices<'_>>) -> Result<TokenKind, String> {
     match c {
-        '{' => Some(LeftBrace),
-        '}' => Some(RightBrace),
-        '(' => Some(LeftParen),
-        ')' => Some(RightParen),
-        ',' => Some(Comma),
-        '.' => Some(Dot),
-        '-' => Some(Minus),
-        '+' => Some(Plus),
-        ';' => Some(Semicolon),
-        '/' => Some(slash(iter)),
-        '*' => Some(Star),
-        '!' | '=' | '>' | '<' => Some(equal_token(c, iter)),
-        '"' => Some(get_string(iter)),
-        '0'..='9' => Some(get_number(c, iter)),
-        'A'..='Z' | 'a'..='z' => Some(get_word(c, iter)),
+        '{' => Ok(LeftBrace),
+        '}' => Ok(RightBrace),
+        '(' => Ok(LeftParen),
+        ')' => Ok(RightParen),
+        ',' => Ok(Comma),
+        '.' => Ok(Dot),
+        '-' => Ok(Minus),
+        '+' => Ok(Plus),
+        ';' => Ok(Semicolon),
+        '/' => slash(iter),
+        '*' => Ok(Star),
+        '!' | '=' | '>' | '<' => Ok(equal_token(c, iter)),
+        '"' => get_string(iter),
+        '0'..='9' => get_number(c, iter),
+        'A'..='Z' | 'a'..='z' => get_identifer(c, iter),
 
-        _ => None,
+        _ => Err(format!("unexpected char:'{}'", c)),
     }
 }
 
-fn get_string(iter: &mut Peekable<CharIndices<'_>>) -> TokenKind {
+fn get_string(iter: &mut Peekable<CharIndices<'_>>) -> Result<TokenKind, String> {
     let mut s = vec![];
 
     loop {
@@ -57,60 +56,79 @@ fn get_string(iter: &mut Peekable<CharIndices<'_>>) -> TokenKind {
             }
             s.push(c);
         } else {
-            break;
+            let str = String::from_iter(s);
+            return Err(format!("unterminated string '{str}'"));
         }
     }
 
-    StrLiteral(String::from_iter(s))
+    Ok(StrLiteral(String::from_iter(s)))
 }
 
-fn slash(iter: &mut Peekable<CharIndices<'_>>) -> TokenKind {
-    // discard comments
-    if let Some((_, c)) = iter.peek() {
-        if *c == '/' {
-            loop {
-                if let Some((_, c)) = iter.next() {
-                    if c == '\n' {
+fn slash(iter: &mut Peekable<CharIndices<'_>>) -> Result<TokenKind, String> {
+    match iter.peek() {
+        Some((_, c)) => {
+            // comments
+            if *c == '/' {
+                loop {
+                    if let Some((_, c)) = iter.next() {
+                        if c == '\n' {
+                            break;
+                        }
+                    } else {
                         break;
                     }
-                } else {
-                    break;
                 }
+                return Ok(Comment);
             }
-            return Comment;
+            Ok(Slash)
         }
+        None => Err(format!("unexpected '\' at the end")),
     }
-    Slash
 }
 
-fn get_number(start: char, iter: &mut Peekable<CharIndices<'_>>) -> TokenKind {
+fn get_number(start: char, iter: &mut Peekable<CharIndices<'_>>) -> Result<TokenKind, String> {
     let mut s = vec![start];
 
     loop {
         if let Some((_, c)) = iter.peek() {
-            if !c.is_numeric() || *c != '.' {
-                break;
+            match *c {
+                '0'..='9' | '.' => {
+                    let (_, ch) = iter.next().unwrap();
+                    s.push(ch);
+                }
+                _ => {
+                    if c.is_ascii_whitespace() || c.is_ascii_graphic() {
+                        break;
+                    }
+                    let num = String::from_iter(s);
+                    return Err(format!("unexpected char '{c}' after '{num}'"));
+                }
             }
-            let (_, ch) = iter.next().unwrap();
-            s.push(ch);
         } else {
             break;
         }
     }
 
-    NumLiteral(String::from_iter(s).parse::<f64>().expect("number"))
+    match String::from_iter(s).parse::<f64>() {
+        Ok(num) => Ok(NumLiteral(num)),
+        Err(err) => Err(err.to_string()),
+    }
 }
 
-fn get_word(start: char, iter: &mut Peekable<CharIndices<'_>>) -> TokenKind {
+fn get_identifer(start: char, iter: &mut Peekable<CharIndices<'_>>) -> Result<TokenKind, String> {
     let mut s = vec![start];
 
     loop {
         if let Some((_, c)) = iter.peek() {
-            if !c.is_alphanumeric() {
+            if c.is_ascii_alphanumeric() || *c == '_' {
+                let (_, ch) = iter.next().unwrap();
+                s.push(ch);
+            } else if c.is_ascii_whitespace() {
                 break;
+            } else if !c.is_ascii() {
+                let prefix = String::from_iter(s);
+                return Err(format!("unexpected char '{c}' after '{prefix}'"));
             }
-            let (_, ch) = iter.next().unwrap();
-            s.push(ch);
         } else {
             break;
         }
@@ -118,7 +136,7 @@ fn get_word(start: char, iter: &mut Peekable<CharIndices<'_>>) -> TokenKind {
 
     let word = String::from_iter(s);
 
-    match word.as_str() {
+    let kind = match word.as_str() {
         "and" => And,
         "class" => Class,
         "else" => Else,
@@ -135,7 +153,9 @@ fn get_word(start: char, iter: &mut Peekable<CharIndices<'_>>) -> TokenKind {
         "var" => Var,
         "while" => While,
         _ => Identifier(word),
-    }
+    };
+
+    Ok(kind)
 }
 
 fn equal_token(c: char, iter: &mut Peekable<CharIndices<'_>>) -> TokenKind {
@@ -185,9 +205,27 @@ mod tests {
     use super::*;
 
     #[test]
+    #[should_panic(expected = "unexpected char 'x' after '3.14' - line: 0 offset: 0")]
+    fn invalid_number() {
+        parse("3.14xz");
+    }
+
+    #[test]
+    #[should_panic(expected = "unexpected char '三' after 'count' - line: 0 offset: 0")]
+    fn invalid_identifer() {
+        parse("count三十");
+    }
+
+    #[test]
+    #[should_panic(expected = "unterminated string 'this is a good day' - line: 0 offset: 0")]
+    fn unterminated_string() {
+        parse("\"this is a good day");
+    }
+
+    #[test]
     fn scan() {
         let s = "var x = 1";
-        let tokens = parse(s).expect("no error");
+        let tokens = parse(s);
         assert_eq!(tokens.len(), 4);
         assert_eq!(
             tokens[0],
