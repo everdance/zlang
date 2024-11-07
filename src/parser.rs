@@ -96,10 +96,8 @@ fn get_number(start: char, iter: &mut Peekable<CharIndices<'_>>) -> Result<Token
                     let (_, ch) = iter.next().unwrap();
                     s.push(ch);
                 }
+                '\t' | ' ' | '%' | '&' | ':'..='?' | '('..='/' => break,
                 _ => {
-                    if c.is_ascii_whitespace() || c.is_ascii_graphic() {
-                        break;
-                    }
                     let num = String::from_iter(s);
                     return Err(format!("unexpected char '{c}' after '{num}'"));
                 }
