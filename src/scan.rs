@@ -138,7 +138,7 @@ impl ScanState<'_> {
                 number_str.push(c);
             } else if c == '.' {
                 if number_str.contains(&c) {
-                    invalid_pos = self.offset + 1;
+                    invalid_pos = (self.offset + 1) as usize;
                     invalid_chars.push(c);
                     break;
                 }
@@ -148,7 +148,7 @@ impl ScanState<'_> {
                 break;
             } else {
                 invalid_chars.push(self.next().unwrap());
-                invalid_pos = self.offset;
+                invalid_pos = self.offset as usize;
                 break;
             }
         }
@@ -188,7 +188,7 @@ impl ScanState<'_> {
                 break;
             } else {
                 invalid_chars.push(self.next().unwrap());
-                invalid_pos = self.offset;
+                invalid_pos = self.offset as usize;
                 break;
             }
         }
@@ -306,7 +306,7 @@ mod tests {
             tokens[0],
             Token {
                 kind: NumLiteral(3.14),
-                pos: 1,
+                pos: 0,
                 line: 0,
             }
         );
@@ -315,7 +315,7 @@ mod tests {
             issues[0],
             Issue {
                 line: 0,
-                pos: 5,
+                pos: 4,
                 message: "unexpected chars 'xy.454' after '3.14'".to_string(),
             }
         );
@@ -330,7 +330,7 @@ mod tests {
             issues[0],
             Issue {
                 line: 0,
-                pos: 6,
+                pos: 5,
                 message: "unexpected chars '三十' after 'count'".to_string(),
             }
         );
@@ -345,7 +345,7 @@ mod tests {
             issues[0],
             Issue {
                 line: 0,
-                pos: 1,
+                pos: 0,
                 message: "unterminated string 'this is a good day'".to_string(),
             }
         );
@@ -361,7 +361,7 @@ mod tests {
             tokens[0],
             Token {
                 kind: Var,
-                pos: 1,
+                pos: 0,
                 line: 0
             }
         );
@@ -369,7 +369,7 @@ mod tests {
             tokens[1],
             Token {
                 kind: Identifier("x".to_string()),
-                pos: 5,
+                pos: 4,
                 line: 0
             }
         );
@@ -377,7 +377,7 @@ mod tests {
             tokens[2],
             Token {
                 kind: Equal,
-                pos: 7,
+                pos: 6,
                 line: 0
             }
         );
@@ -385,7 +385,7 @@ mod tests {
             tokens[3],
             Token {
                 kind: NumLiteral(1.0),
-                pos: 9,
+                pos: 8,
                 line: 0
             }
         );
