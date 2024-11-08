@@ -1,9 +1,11 @@
+#[derive(Debug, PartialEq)]
 pub struct Token {
-    kind: TokenKind,
-    line: i32,
-    col: i32,
+    pub kind: TokenKind,
+    pub line: usize,
+    pub pos: usize,
 }
 
+#[derive(Debug, PartialEq)]
 pub enum TokenKind {
     LeftParen,
     RightParen,
@@ -45,4 +47,6 @@ pub enum TokenKind {
     True,
     Var,
     While,
+
+    Comment,
 }
