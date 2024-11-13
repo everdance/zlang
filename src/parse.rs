@@ -8,3 +8,15 @@ impl Parser {
         Err("to implement".to_string())
     }
 }
+
+struct ParseState<'a> {
+    tokens: &'a Vec<Token>,
+    cursor: usize,
+    stmts: Vec<Stmt>,
+}
+
+impl ParseState<'_> {
+    fn get_stmt(&mut self) -> Result<Stmt, String> {
+        Err("to implement".to_string())
+    }
+}
