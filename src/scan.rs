@@ -19,10 +19,20 @@ impl Scanner {
     }
 }
 
-// separator chars for number and identifer
-fn is_sep_char(c: char) -> bool {
+//  identifer separators
+fn is_iden_sep(c: char) -> bool {
     match c {
-        '\t' | ' ' | '\n' | '\r' | '%' | '&' | '|' | ':'..='?' | '('..='/' => true,
+        '\t' | ' ' | '\n' | '\r' | '%' | '&' | '{'..='}' | '[' | ']' | ':'..='?' | '('..='/' => {
+            true
+        }
+        _ => false,
+    }
+}
+
+// number separators
+fn is_num_sep(c: char) -> bool {
+    match c {
+        '\t' | ' ' | '\n' | '\r' | '%' | ']' | '&' | '{'..='}' | ':'..='?' | '('..='/' => true,
         _ => false,
     }
 }
@@ -72,7 +82,7 @@ impl ScanState<'_> {
             ';' => Ok(Semicolon),
             '*' => Ok(Star),
             '!' | '=' | '>' | '<' => Ok(self.equal_token(c)),
-            '/' => self.slash(),
+            '/' => Ok(self.slash()),
             '"' => self.get_string(),
             '0'..='9' => self.get_number(c),
             'A'..='Z' | 'a'..='z' => self.get_identifer(c),
@@ -94,6 +104,25 @@ impl ScanState<'_> {
         }
     }
 
+    fn slash(&mut self) -> TokenKind {
+        match self.peek() {
+            Some(c) => {
+                // comments
+                if c == '/' {
+                    while let Some(c) = self.peek() {
+                        if c == '\n' {
+                            break;
+                        }
+                        self.next();
+                    }
+                    return Comment;
+                }
+                Slash
+            }
+            None => Slash,
+        }
+    }
+
     fn get_string(&mut self) -> Result<TokenKind, String> {
         let mut s = vec![];
 
@@ -106,25 +135,6 @@ impl ScanState<'_> {
 
         let str = String::from_iter(s);
         Err(format!("unterminated string '{str}'"))
-    }
-
-    fn slash(&mut self) -> Result<TokenKind, String> {
-        match self.peek() {
-            Some(c) => {
-                // comments
-                if c == '/' {
-                    while let Some(c) = self.peek() {
-                        if c == '\n' {
-                            break;
-                        }
-                        self.next();
-                    }
-                    return Ok(Comment);
-                }
-                Ok(Slash)
-            }
-            None => Err(format!("unexpected '/' at the end")),
-        }
     }
 
     fn get_number(&mut self, start: char) -> Result<TokenKind, String> {
@@ -144,7 +154,7 @@ impl ScanState<'_> {
                 }
                 self.next();
                 number_str.push(c);
-            } else if is_sep_char(c) {
+            } else if is_num_sep(c) {
                 break;
             } else {
                 invalid_chars.push(self.next().unwrap());
@@ -184,7 +194,7 @@ impl ScanState<'_> {
         while let Some(c) = self.peek() {
             if c.is_ascii_alphanumeric() || c == '_' {
                 s.push(self.next().unwrap());
-            } else if is_sep_char(c) {
+            } else if is_iden_sep(c) {
                 break;
             } else {
                 invalid_chars.push(self.next().unwrap());
@@ -298,6 +308,15 @@ impl ScanState<'_> {
 mod tests {
     use super::*;
 
+    fn to_string(tokens: Vec<Token>) -> String {
+        tokens
+            .iter()
+            .map(|x| x.to_string() + ",")
+            .collect::<String>()
+            .trim_end_matches(",")
+            .to_string()
+    }
+
     #[test]
     fn invalid_number() {
         let (tokens, issues) = Scanner::scan("3.14xy.454");
@@ -352,42 +371,37 @@ mod tests {
     }
 
     #[test]
-    fn scan() {
-        let s = "var x = 1";
+    fn scan_var_def() {
+        let s = "var x = 1;// var definition";
         let (tokens, issues) = Scanner::scan(s);
         assert_eq!(issues.len(), 0);
-        assert_eq!(tokens.len(), 4);
         assert_eq!(
-            tokens[0],
-            Token {
-                kind: Var,
-                pos: 0,
-                line: 0
-            }
+            to_string(tokens),
+            "Var,Identifier(\"x\"),Equal,NumLiteral(1.0),Semicolon,Comment"
         );
-        assert_eq!(
-            tokens[1],
-            Token {
-                kind: Identifier("x".to_string()),
-                pos: 4,
-                line: 0
-            }
-        );
-        assert_eq!(
-            tokens[2],
-            Token {
-                kind: Equal,
-                pos: 6,
-                line: 0
-            }
-        );
-        assert_eq!(
-            tokens[3],
-            Token {
-                kind: NumLiteral(1.0),
-                pos: 8,
-                line: 0
-            }
-        );
+    }
+
+    #[test]
+    fn scan_expressions() {
+        let s = "1==2; \nif (x > 0) { y = 2} else y += 3;while true and false {x=y;}";
+        let (tokens, issues) = Scanner::scan(s);
+        assert_eq!(issues.len(), 0);
+        assert_eq!(to_string(tokens), "NumLiteral(1.0),DoubleEqual,NumLiteral(2.0),Semicolon,If,LeftParen,Identifier(\"x\"),Greater,NumLiteral(0.0),RightParen,LeftBrace,Identifier(\"y\"),Equal,NumLiteral(2.0),RightBrace,Else,Identifier(\"y\"),Plus,Equal,NumLiteral(3.0),Semicolon,While,True,And,False,LeftBrace,Identifier(\"x\"),Equal,Identifier(\"y\"),Semicolon,RightBrace");
+    }
+
+    #[test]
+    fn scan_function() {
+        let s = "fun double(x) { var d = x * 2; return d;}";
+        let (tokens, issues) = Scanner::scan(s);
+        assert_eq!(issues.len(), 0);
+        assert_eq!(to_string(tokens), "Fun,Identifier(\"double\"),LeftParen,Identifier(\"x\"),RightParen,LeftBrace,Var,Identifier(\"d\"),Equal,Identifier(\"x\"),Star,NumLiteral(2.0),Semicolon,Return,Identifier(\"d\"),Semicolon,RightBrace");
+    }
+
+    #[test]
+    fn scan_class() {
+        let s = "class Car extends Vehicle { Car() {super(); this.type = \"car\";} }";
+        let (tokens, issues) = Scanner::scan(s);
+        assert_eq!(issues.len(), 0);
+        assert_eq!(to_string(tokens), "Class,Identifier(\"Car\"),Identifier(\"extends\"),Identifier(\"Vehicle\"),LeftBrace,Identifier(\"Car\"),LeftParen,RightParen,LeftBrace,Super,LeftParen,RightParen,Semicolon,This,Dot,Identifier(\"type\"),Equal,StrLiteral(\"car\"),Semicolon,RightBrace,RightBrace");
     }
 }
