@@ -1,4 +1,6 @@
-enum ExprType {
+use crate::token::TokenKind;
+
+pub enum ExprType {
     Literal(TokenKind),
     Binary(TokenKind),
     Unary(TokenKind),
@@ -13,9 +15,9 @@ enum ExprType {
     Super(TokenKind),
 }
 
-struct Expr {
+pub struct Expr {
     pub kind: ExprType,
-    pub left: Option<Expr>,
-    pub right: Option<Expr>,
-    pub params: Vector<Expr>,
+    pub left: Option<Box<Expr>>,
+    pub right: Option<Box<Expr>>,
+    pub list: Option<Vec<Expr>>,
 }
