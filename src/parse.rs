@@ -73,6 +73,36 @@ impl ParseState<'_> {
     }
 
     fn stmt(&mut self) -> Result<Stmt, String> {
+        if self.match_token(TokenKind::If) {
+            return self.ifstmt();
+        } else if self.match_token(TokenKind::For) {
+            return self.forstmt();
+        } else if self.match_token(TokenKind::While) {
+            return self.whilestmt();
+        } else if self.match_token(TokenKind::LeftBrace) {
+            return self.blockstmt();
+        } else {
+            return self.assign();
+        }
+    }
+
+    fn ifstmt(&mut self) -> Result<Stmt, String> {
+        Err("to implement".to_string())
+    }
+
+    fn forstmt(&mut self) -> Result<Stmt, String> {
+        Err("to implement".to_string())
+    }
+
+    fn whilestmt(&mut self) -> Result<Stmt, String> {
+        Err("to implement".to_string())
+    }
+
+    fn blockstmt(&mut self) -> Result<Stmt, String> {
+        Err("to implement".to_string())
+    }
+
+    fn assign(&mut self) -> Result<Stmt, String> {
         Err("to implement".to_string())
     }
 
