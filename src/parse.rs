@@ -1,12 +1,13 @@
-use crate::expr::{ClassStmt, FunStmt, Stmt};
-use crate::token::{Token, TokenKind};
+use crate::expr::{Expr, ExprType, Stmt};
+use crate::new_expr;
+use crate::token::{Token, TokenKind, TokenKind::*};
 
 pub struct Parser;
 
 impl Parser {
-    pub fn parse(tokens: Vec<Token>) -> Result<Vec<Stmt>, String> {
+    pub fn parse(tokens: &[Token]) -> Result<Vec<Stmt>, String> {
         let mut state = ParseState {
-            tokens: &tokens,
+            tokens,
             cursor: 0,
             stmts: vec![],
         };
@@ -23,7 +24,7 @@ impl Parser {
 }
 
 struct ParseState<'a> {
-    tokens: &'a Vec<Token>,
+    tokens: &'a [Token],
     cursor: usize,
     stmts: Vec<Stmt>,
 }
@@ -73,16 +74,16 @@ impl ParseState<'_> {
     }
 
     fn stmt(&mut self) -> Result<Stmt, String> {
-        if self.match_token(TokenKind::If) {
+        if self.matches(TokenKind::If) {
             return self.ifstmt();
-        } else if self.match_token(TokenKind::For) {
+        } else if self.matches(TokenKind::For) {
             return self.forstmt();
-        } else if self.match_token(TokenKind::While) {
+        } else if self.matches(TokenKind::While) {
             return self.whilestmt();
-        } else if self.match_token(TokenKind::LeftBrace) {
+        } else if self.matches(TokenKind::LeftBrace) {
             return self.blockstmt();
         } else {
-            return self.assign();
+            return self.exprstmt();
         }
     }
 
@@ -102,11 +103,285 @@ impl ParseState<'_> {
         Err("to implement".to_string())
     }
 
-    fn assign(&mut self) -> Result<Stmt, String> {
+    fn exprstmt(&mut self) -> Result<Stmt, String> {
+        match self.expr() {
+            Ok(expr) => Ok(Stmt::Expr(expr)),
+            Err(msg) => Err(msg),
+        }
+    }
+
+    fn expr(&mut self) -> Result<Expr, String> {
+        match self.or() {
+            Ok(expr) => {
+                if self.matches(TokenKind::Equal) {
+                    match self.expr() {
+                        Ok(val) => match expr.kind {
+                            ExprType::Variable(_) => {
+                                return Ok(new_expr!(
+                                    ExprType::Assign,
+                                    Some(Box::new(expr)),
+                                    Some(Box::new(val))
+                                ))
+                            }
+                            ExprType::Get(_) => {
+                                return Ok(new_expr!(
+                                    ExprType::Set,
+                                    Some(Box::new(expr)),
+                                    Some(Box::new(val))
+                                ))
+                            }
+                            _ => return Err("invalid assignment".to_string()),
+                        },
+                        Err(e) => return Err(e),
+                    }
+                } else {
+                    return Ok(expr);
+                }
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    fn or(&mut self) -> Result<Expr, String> {
+        let res = self.and();
+        if let Err(msg) = res {
+            return Err(msg);
+        }
+
+        let mut expr = res.unwrap();
+        while self.matches(Or) {
+            match self.and() {
+                Ok(right) => {
+                    expr = new_expr!(
+                        ExprType::Logical(Or),
+                        Some(Box::new(expr)),
+                        Some(Box::new(right))
+                    )
+                }
+                Err(msg) => return Err(msg),
+            }
+        }
+
+        Ok(expr)
+    }
+
+    fn and(&mut self) -> Result<Expr, String> {
+        let res = self.equal();
+        if let Err(msg) = res {
+            return Err(msg);
+        }
+
+        let mut expr = res.unwrap();
+        while self.matches(And) {
+            match self.and() {
+                Ok(right) => {
+                    expr = new_expr!(
+                        ExprType::Logical(And),
+                        Some(Box::new(expr)),
+                        Some(Box::new(right))
+                    )
+                }
+                Err(msg) => return Err(msg),
+            }
+        }
+
+        Ok(expr)
+    }
+
+    // ==
+    fn equal(&mut self) -> Result<Expr, String> {
+        let res = self.compare();
+        if let Err(msg) = res {
+            return Err(msg);
+        }
+
+        let mut expr = res.unwrap();
+        while self.matches_any(vec![BangEqual, DoubleEqual]) {
+            let op = self.prev().unwrap().kind.clone();
+            match self.compare() {
+                Ok(right) => {
+                    expr = new_expr!(
+                        ExprType::Binary(op),
+                        Some(Box::new(expr)),
+                        Some(Box::new(right))
+                    )
+                }
+                Err(msg) => return Err(msg),
+            }
+        }
+
+        Ok(expr)
+    }
+
+    // >,<,>=,<=
+    fn compare(&mut self) -> Result<Expr, String> {
+        let res = self.term();
+        if let Err(msg) = res {
+            return Err(msg);
+        }
+
+        let mut expr = res.unwrap();
+        while self.matches_any(vec![Greater, GreaterEqual, Less, LessEqual]) {
+            let op = self.prev().unwrap().kind.clone();
+            match self.term() {
+                Ok(right) => {
+                    expr = new_expr!(
+                        ExprType::Binary(op),
+                        Some(Box::new(expr)),
+                        Some(Box::new(right))
+                    )
+                }
+                Err(msg) => return Err(msg),
+            }
+        }
+
+        Ok(expr)
+    }
+
+    // +,-
+    fn term(&mut self) -> Result<Expr, String> {
+        let res = self.factor();
+        if let Err(msg) = res {
+            return Err(msg);
+        }
+
+        let mut expr = res.unwrap();
+        while self.matches_any(vec![Minus, Plus]) {
+            let op = self.prev().unwrap().kind.clone();
+            match self.factor() {
+                Ok(right) => {
+                    expr = new_expr!(
+                        ExprType::Binary(op),
+                        Some(Box::new(expr)),
+                        Some(Box::new(right))
+                    )
+                }
+                Err(msg) => return Err(msg),
+            }
+        }
+
+        Ok(expr)
+    }
+
+    // *,/
+    fn factor(&mut self) -> Result<Expr, String> {
+        let res = self.unary();
+        if let Err(msg) = res {
+            return Err(msg);
+        }
+
+        let mut expr = res.unwrap();
+        while self.matches_any(vec![Slash, Star]) {
+            let op = self.prev().unwrap().kind.clone();
+            match self.unary() {
+                Ok(right) => expr = new_expr!(ExprType::Unary(op), None, Some(Box::new(right))),
+                Err(msg) => return Err(msg),
+            }
+        }
+
+        Ok(expr)
+    }
+
+    // !,-
+    fn unary(&mut self) -> Result<Expr, String> {
+        if self.matches_any(vec![Bang, Minus]) {
+            let op = ExprType::Unary(self.prev().unwrap().kind.clone());
+            return match self.unary() {
+                Ok(right) => Ok(new_expr!(op, None, Some(Box::new(right)))),
+                Err(msg) => Err(msg),
+            };
+        }
+        self.call()
+    }
+
+    // call
+    fn call(&mut self) -> Result<Expr, String> {
+        let res = self.primary();
+        if let Err(msg) = res {
+            return Err(msg);
+        }
+
+        let mut expr = res.unwrap();
+        loop {
+            if self.matches(LeftParen) {
+                match self.make_call(expr) {
+                    Ok(call) => expr = call,
+                    Err(msg) => return Err(msg),
+                }
+            } else if self.matches(Dot) {
+                if self.matches(Identifier("".to_string())) {
+                    let token = self.prev().unwrap().kind.clone();
+                    expr = new_expr!(ExprType::Get(token), Some(Box::new(expr)));
+                } else {
+                    return Err("Expect property name after dot".to_string());
+                }
+            } else {
+                break;
+            }
+        }
+
+        Ok(expr)
+    }
+
+    fn make_call(&mut self, callee: Expr) -> Result<Expr, String> {
+        let mut args = vec![];
+
+        if self.matches(RightParen) {
+            return Ok(new_expr!(ExprType::Call, Some(Box::new(callee))));
+        }
+
+        loop {
+            if args.len() >= 255 {
+                return Err("can't have more than 255 parameters".to_string());
+            }
+            match self.expr() {
+                Ok(param) => args.push(param),
+                Err(msg) => return Err(msg),
+            }
+
+            if self.matches(Comma) {
+                continue;
+            }
+            break;
+        }
+
+        return Ok(new_expr!(
+            ExprType::Call,
+            Some(Box::new(callee)),
+            None,
+            Some(args)
+        ));
+    }
+
+    // literals
+    fn primary(&mut self) -> Result<Expr, String> {
+        if let Some(token) = self.next() {
+            return match token.kind {
+                StrLiteral(_) | NumLiteral(_) | True | False | Nil => {
+                    Ok(new_expr!(ExprType::Literal(token.kind.clone())))
+                }
+
+                Identifier(_) => Ok(new_expr!(ExprType::Variable(token.kind.clone()))),
+
+                LeftParen => match self.expr() {
+                    Ok(subexpr) => {
+                        if self.matches(RightParen) {
+                            Ok(new_expr!(ExprType::Grouping, Some(Box::new(subexpr))))
+                        } else {
+                            Err("missing right paren after expression".to_string())
+                        }
+                    }
+                    Err(msg) => Err(msg),
+                },
+                // TODO: super, this
+                _ => Err("".to_string()),
+            };
+        }
+
         Err("to implement".to_string())
     }
 
-    fn match_token(&mut self, kind: TokenKind) -> bool {
+    fn matches(&mut self, kind: TokenKind) -> bool {
         if let Some(token) = self.peek() {
             if token.kind == kind {
                 self.next();
@@ -114,6 +389,15 @@ impl ParseState<'_> {
             }
         }
 
+        false
+    }
+
+    fn matches_any(&mut self, kinds: Vec<TokenKind>) -> bool {
+        for k in kinds {
+            if self.matches(k) {
+                return true;
+            }
+        }
         false
     }
 

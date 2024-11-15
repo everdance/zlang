@@ -7,10 +7,10 @@ pub enum ExprType {
     Variable(TokenKind),
     Logical(TokenKind),
     Grouping,
-    Call(TokenKind),
-    Assign(TokenKind),
+    Call,
+    Assign,
     Get(TokenKind),
-    Set(TokenKind),
+    Set,
     This(TokenKind),
     Super(TokenKind),
 }
@@ -22,39 +22,49 @@ pub struct Expr {
     pub list: Option<Vec<Expr>>,
 }
 
-pub struct IfStmt {
-    pub cond: Expr,
-    pub thens: Vec<Stmt>,
-    pub elses: Option<Vec<Stmt>>,
-}
-
-pub struct BlkStmt {
-    pub list: Vec<Stmt>,
-}
-
-pub struct WhileStmt {
-    pub cond: Expr,
-    pub list: Vec<Stmt>,
-}
-
-pub struct FunStmt {
-    pub name: Token,
-    pub params: Vec<Token>,
-    pub body: Vec<Stmt>,
-}
-
-pub struct ClassStmt {
-    pub name: Token,
-    pub methods: Vec<FunStmt>,
+#[macro_export]
+macro_rules! new_expr {
+    ($kind: expr) => {
+        Expr {
+            kind: $kind,
+            left: None,
+            right: None,
+            list: None,
+        }
+    };
+    ($kind: expr, $left: expr) => {
+        Expr {
+            kind: $kind,
+            left: $left,
+            right: None,
+            list: None,
+        }
+    };
+    ($kind: expr, $left: expr, $right: expr) => {
+        Expr {
+            kind: $kind,
+            left: $left,
+            right: $right,
+            list: None,
+        }
+    };
+    ($kind: expr, $left: expr, $right: expr, $list: expr) => {
+        Expr {
+            kind: $kind,
+            left: $left,
+            right: $right,
+            list: $list,
+        }
+    };
 }
 
 pub enum Stmt {
     Expr(Expr),
     Var(Token, Expr),
     Return(Token, Expr),
-    If(IfStmt),
-    Block(BlkStmt),
-    While(WhileStmt),
-    Fun(FunStmt),
-    Class(ClassStmt),
+    If(Expr, Box<Stmt>, Option<Box<Stmt>>),
+    Block(Vec<Stmt>),
+    While(Expr, Box<Stmt>),
+    Fun(Token, Vec<Token>, Vec<Stmt>),
+    Class(Token, Vec<Stmt>),
 }
