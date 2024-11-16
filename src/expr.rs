@@ -23,9 +23,14 @@ pub struct Expr {
     pub list: Option<Vec<Expr>>,
 }
 
-pub fn liternal(t: Token) -> Expr {
+pub fn literal(t: Token) -> Expr {
+    let kind = match t.kind {
+        Kind::Var => ExprType::Variable,
+        _ => ExprType::Literal,
+    };
+
     Expr {
-        kind: ExprType::Literal,
+        kind,
         token: t,
         left: None,
         right: None,
@@ -33,19 +38,19 @@ pub fn liternal(t: Token) -> Expr {
     }
 }
 
-pub fn single(t: Token, left: Expr) -> Expr {
+pub fn single(t: Token, opr: Expr) -> Expr {
     let kind = match t.kind {
         Kind::Minus | Kind::Bang => ExprType::Unary,
         Kind::LeftParen => ExprType::Grouping,
-        Kind::Var => ExprType::Variable,
         Kind::Equal => ExprType::Assign,
+        Kind::Identifier(_) => ExprType::Get,
         _ => panic!("unexpected token type: {:?}", t),
     };
 
     Expr {
         kind,
         token: t,
-        left: Some(Box::new(left)),
+        left: Some(Box::new(opr)),
         right: None,
         list: None,
     }

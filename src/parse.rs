@@ -114,7 +114,8 @@ impl ParseState<'_> {
                     let t = self.prev().unwrap().clone();
                     match self.expr() {
                         Ok(val) => match epx.kind {
-                            ExprType::Variable | ExprType::Get => Ok(expr::double(t, epx, val)),
+                            ExprType::Variable => Ok(expr::single(t, val)), // assign
+                            ExprType::Get => Ok(expr::double(t, epx, val)), // set
                             _ => return Err("invalid assignment".to_string()),
                         },
                         Err(e) => return Err(e),
@@ -231,7 +232,7 @@ impl ParseState<'_> {
         while self.matches_any(vec![Slash, Star]) {
             let t = self.prev().unwrap().clone();
             match self.unary() {
-                Ok(opr) => epx = expr::single(t, opr),
+                Ok(opr) => epx = expr::double(t, epx, opr),
                 Err(msg) => return Err(msg),
             }
         }
@@ -323,7 +324,7 @@ impl ParseState<'_> {
 
         match token.kind {
             Identifier(_) | StrLiteral(_) | NumLiteral(_) | True | False | Nil => {
-                Ok(expr::liternal(token))
+                Ok(expr::literal(token))
             }
 
             LeftParen => match self.expr() {
