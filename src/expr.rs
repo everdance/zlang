@@ -26,6 +26,7 @@ pub struct Expr {
 pub fn literal(t: Token) -> Expr {
     let kind = match t.kind {
         Kind::Var => ExprType::Variable,
+        Kind::This => ExprType::This,
         _ => ExprType::Literal,
     };
 
@@ -44,6 +45,7 @@ pub fn single(t: Token, opr: Expr) -> Expr {
         Kind::LeftParen => ExprType::Grouping,
         Kind::Equal => ExprType::Assign,
         Kind::Identifier(_) => ExprType::Get,
+        Kind::Super => ExprType::Super,
         _ => panic!("unexpected token type: {:?}", t),
     };
 
@@ -88,7 +90,7 @@ pub enum Stmt {
     Expr(Expr),
     Var(Token, Expr),
     Return(Token, Expr),
-    If(Expr, Box<Stmt>, Option<Box<Stmt>>),
+    If(Expr, Box<Stmt>),
     Block(Vec<Stmt>),
     While(Expr, Box<Stmt>),
     Fun(Token, Vec<Token>, Vec<Stmt>),

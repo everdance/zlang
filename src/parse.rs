@@ -73,7 +73,26 @@ impl ParseState<'_> {
     }
 
     fn ifstmt(&mut self) -> Result<Stmt, String> {
-        Err("to implement".to_string())
+        if self.matches(LeftParen) {
+            match self.exprstmt() {
+                Ok(Stmt::Expr(cond)) => {
+                    if self.matches(RightParen) {
+                        // block or single expression
+                        if let Ok(stmt) = self.exprstmt() {
+                            Ok(Stmt::If(cond, Box::new(stmt)))
+                        } else {
+                            Err("expect right paren after if expression".to_string())
+                        }
+                    } else {
+                        Err("expect right paren after if expression".to_string())
+                    }
+                }
+                Err(msg) => Err(msg),
+                _ => Err("no match".to_string()),
+            }
+        } else {
+            Err("expect left paren after if".to_string())
+        }
     }
 
     fn forstmt(&mut self) -> Result<Stmt, String> {
@@ -85,7 +104,19 @@ impl ParseState<'_> {
     }
 
     fn blockstmt(&mut self) -> Result<Stmt, String> {
-        Err("to implement".to_string())
+        let mut stmts = vec![];
+
+        loop {
+            if self.matches(RightBrace) {
+                break;
+            }
+            match self.stmt() {
+                Ok(st) => stmts.push(st),
+                Err(msg) => return Err(msg),
+            }
+        }
+
+        Ok(Stmt::Block(stmts))
     }
 
     fn exprstmt(&mut self) -> Result<Stmt, String> {
@@ -337,7 +368,19 @@ impl ParseState<'_> {
                 }
                 Err(msg) => Err(msg),
             },
-            // TODO: super, this
+
+            This => Ok(expr::literal(token)),
+
+            Super => {
+                if self.matches(Dot) {
+                    match self.expr() {
+                        Ok(method) => Ok(expr::single(token, method)),
+                        Err(msg) => Err(msg),
+                    }
+                } else {
+                    Err("missing dot after super".to_string())
+                }
+            }
             _ => Err("".to_string()),
         }
     }
