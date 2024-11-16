@@ -1,5 +1,4 @@
-use crate::expr::{Expr, ExprType, Stmt};
-use crate::new_expr;
+use crate::expr::{self, Expr, ExprType, Stmt};
 use crate::token::{Kind, Kind::*, Token};
 
 pub struct Parser;
@@ -30,8 +29,8 @@ struct ParseState<'a> {
 }
 
 impl ParseState<'_> {
-    /// group 1: high level language syntax
-    ///          function, class, variable definition
+    // group 1: high level language syntax
+    //          function, class, variable definition
     fn parse(&mut self) -> Result<Stmt, String> {
         if let Some(token) = self.peek() {
             return match token.kind {
@@ -57,8 +56,8 @@ impl ParseState<'_> {
         Err("to implement".to_string())
     }
 
-    /// group 2: common control flow
-    ///          if, for, while, block, return
+    // group 2: common control flow
+    //          if, for, while, block, return
     fn stmt(&mut self) -> Result<Stmt, String> {
         if self.matches(Kind::If) {
             return self.ifstmt();
@@ -96,44 +95,32 @@ impl ParseState<'_> {
         }
     }
 
-    /// group 3: fundamental expressions (priority ascending ordered)
-    ///          assign, set
-    ///          or
-    ///          and
-    ///          equality
-    ///          comparison
-    ///          binary(+-)
-    ///          binary(*/)
-    ///          unary(!,-)
-    ///          call
-    ///          super, this, identifer, grouping
-    ///          number, string, bool, nil, etc
+    //  group 3: fundamental expressions (priority ascending ordered)
+    //           assign, set
+    //           or
+    //           and
+    //           equality
+    //           comparison
+    //           binary(+-)
+    //           binary(*/)
+    //           unary(!,-)
+    //           call
+    //           super, this, identifer, grouping
+    //           number, string, bool, nil, etc
     fn expr(&mut self) -> Result<Expr, String> {
         match self.or() {
-            Ok(expr) => {
+            Ok(epx) => {
                 if self.matches(Kind::Equal) {
+                    let t = self.prev().unwrap().clone();
                     match self.expr() {
-                        Ok(val) => match expr.kind {
-                            ExprType::Variable(_) => {
-                                return Ok(new_expr!(
-                                    ExprType::Assign,
-                                    Some(Box::new(expr)),
-                                    Some(Box::new(val))
-                                ))
-                            }
-                            ExprType::Get(_) => {
-                                return Ok(new_expr!(
-                                    ExprType::Set,
-                                    Some(Box::new(expr)),
-                                    Some(Box::new(val))
-                                ))
-                            }
+                        Ok(val) => match epx.kind {
+                            ExprType::Variable | ExprType::Get => Ok(expr::double(t, epx, val)),
                             _ => return Err("invalid assignment".to_string()),
                         },
                         Err(e) => return Err(e),
                     }
                 } else {
-                    return Ok(expr);
+                    return Ok(epx);
                 }
             }
             Err(e) => Err(e),
@@ -146,21 +133,16 @@ impl ParseState<'_> {
             return Err(msg);
         }
 
-        let mut expr = res.unwrap();
+        let mut epx = res.unwrap();
         while self.matches(Or) {
+            let t = self.prev().unwrap().clone();
             match self.and() {
-                Ok(right) => {
-                    expr = new_expr!(
-                        ExprType::Logical(Or),
-                        Some(Box::new(expr)),
-                        Some(Box::new(right))
-                    )
-                }
+                Ok(right) => epx = expr::double(t, epx, right),
                 Err(msg) => return Err(msg),
             }
         }
 
-        Ok(expr)
+        Ok(epx)
     }
 
     fn and(&mut self) -> Result<Expr, String> {
@@ -169,21 +151,16 @@ impl ParseState<'_> {
             return Err(msg);
         }
 
-        let mut expr = res.unwrap();
+        let mut epx = res.unwrap();
         while self.matches(And) {
-            match self.and() {
-                Ok(right) => {
-                    expr = new_expr!(
-                        ExprType::Logical(And),
-                        Some(Box::new(expr)),
-                        Some(Box::new(right))
-                    )
-                }
+            let t = self.prev().unwrap().clone();
+            match self.equal() {
+                Ok(right) => epx = expr::double(t, epx, right),
                 Err(msg) => return Err(msg),
             }
         }
 
-        Ok(expr)
+        Ok(epx)
     }
 
     // ==
@@ -193,22 +170,16 @@ impl ParseState<'_> {
             return Err(msg);
         }
 
-        let mut expr = res.unwrap();
+        let mut epx = res.unwrap();
         while self.matches_any(vec![BangEqual, DoubleEqual]) {
-            let op = self.prev().unwrap().kind.clone();
+            let t = self.prev().unwrap().clone();
             match self.compare() {
-                Ok(right) => {
-                    expr = new_expr!(
-                        ExprType::Binary(op),
-                        Some(Box::new(expr)),
-                        Some(Box::new(right))
-                    )
-                }
+                Ok(right) => epx = expr::double(t, epx, right),
                 Err(msg) => return Err(msg),
             }
         }
 
-        Ok(expr)
+        Ok(epx)
     }
 
     // >,<,>=,<=
@@ -218,22 +189,16 @@ impl ParseState<'_> {
             return Err(msg);
         }
 
-        let mut expr = res.unwrap();
+        let mut epx = res.unwrap();
         while self.matches_any(vec![Greater, GreaterEqual, Less, LessEqual]) {
-            let op = self.prev().unwrap().kind.clone();
+            let t = self.prev().unwrap().clone();
             match self.term() {
-                Ok(right) => {
-                    expr = new_expr!(
-                        ExprType::Binary(op),
-                        Some(Box::new(expr)),
-                        Some(Box::new(right))
-                    )
-                }
+                Ok(right) => epx = expr::double(t, epx, right),
                 Err(msg) => return Err(msg),
             }
         }
 
-        Ok(expr)
+        Ok(epx)
     }
 
     // +,-
@@ -243,22 +208,16 @@ impl ParseState<'_> {
             return Err(msg);
         }
 
-        let mut expr = res.unwrap();
+        let mut epx = res.unwrap();
         while self.matches_any(vec![Minus, Plus]) {
-            let op = self.prev().unwrap().kind.clone();
+            let t = self.prev().unwrap().clone();
             match self.factor() {
-                Ok(right) => {
-                    expr = new_expr!(
-                        ExprType::Binary(op),
-                        Some(Box::new(expr)),
-                        Some(Box::new(right))
-                    )
-                }
+                Ok(right) => epx = expr::double(t, epx, right),
                 Err(msg) => return Err(msg),
             }
         }
 
-        Ok(expr)
+        Ok(epx)
     }
 
     // *,/
@@ -268,27 +227,29 @@ impl ParseState<'_> {
             return Err(msg);
         }
 
-        let mut expr = res.unwrap();
+        let mut epx = res.unwrap();
         while self.matches_any(vec![Slash, Star]) {
-            let op = self.prev().unwrap().kind.clone();
+            let t = self.prev().unwrap().clone();
             match self.unary() {
-                Ok(right) => expr = new_expr!(ExprType::Unary(op), None, Some(Box::new(right))),
+                Ok(opr) => epx = expr::single(t, opr),
                 Err(msg) => return Err(msg),
             }
         }
 
-        Ok(expr)
+        Ok(epx)
     }
 
     // !,-
     fn unary(&mut self) -> Result<Expr, String> {
         if self.matches_any(vec![Bang, Minus]) {
-            let op = ExprType::Unary(self.prev().unwrap().kind.clone());
+            let t = self.prev().unwrap().clone();
+
             return match self.unary() {
-                Ok(right) => Ok(new_expr!(op, None, Some(Box::new(right)))),
+                Ok(opr) => Ok(expr::single(t, opr)),
                 Err(msg) => Err(msg),
             };
         }
+
         self.call()
     }
 
@@ -299,7 +260,7 @@ impl ParseState<'_> {
             return Err(msg);
         }
 
-        let mut expr = res.unwrap();
+        let mut epx = res.unwrap();
         loop {
             let suffix = self.peek();
             if suffix == None {
@@ -307,14 +268,14 @@ impl ParseState<'_> {
             }
 
             match suffix.unwrap().kind {
-                LeftParen => match self.make_call(expr) {
-                    Ok(call) => expr = call,
+                LeftParen => match self.make_call(epx, suffix.unwrap().clone()) {
+                    Ok(call) => epx = call,
                     Err(msg) => return Err(msg),
                 },
                 Dot => {
                     if self.matches(Identifier("".to_string())) {
-                        let token = self.prev().unwrap().kind.clone();
-                        expr = new_expr!(ExprType::Get(token), Some(Box::new(expr)));
+                        let token = self.prev().unwrap().clone();
+                        epx = expr::single(token, epx);
                     } else {
                         return Err("Expect identifier after dot".to_string());
                     }
@@ -323,14 +284,14 @@ impl ParseState<'_> {
             }
         }
 
-        Ok(expr)
+        Ok(epx)
     }
 
-    fn make_call(&mut self, callee: Expr) -> Result<Expr, String> {
+    fn make_call(&mut self, callee: Expr, t: Token) -> Result<Expr, String> {
         let mut args = vec![];
 
         if self.matches(RightParen) {
-            return Ok(new_expr!(ExprType::Call, Some(Box::new(callee))));
+            return Ok(expr::list(t, callee, vec![]));
         }
 
         loop {
@@ -348,12 +309,7 @@ impl ParseState<'_> {
             break;
         }
 
-        return Ok(new_expr!(
-            ExprType::Call,
-            Some(Box::new(callee)),
-            None,
-            Some(args)
-        ));
+        Ok(expr::list(t, callee, args))
     }
 
     // literals
@@ -363,19 +319,17 @@ impl ParseState<'_> {
             return Err("unexpected end".to_string());
         }
 
-        let token = res.unwrap();
+        let token = res.unwrap().clone();
 
         match token.kind {
-            StrLiteral(_) | NumLiteral(_) | True | False | Nil => {
-                Ok(new_expr!(ExprType::Literal(token.kind.clone())))
+            Identifier(_) | StrLiteral(_) | NumLiteral(_) | True | False | Nil => {
+                Ok(expr::liternal(token))
             }
-
-            Identifier(_) => Ok(new_expr!(ExprType::Variable(token.kind.clone()))),
 
             LeftParen => match self.expr() {
                 Ok(sub) => {
                     if self.matches(RightParen) {
-                        Ok(new_expr!(ExprType::Grouping, Some(Box::new(sub))))
+                        Ok(expr::single(token, sub))
                     } else {
                         Err("missing right paren after expression".to_string())
                     }

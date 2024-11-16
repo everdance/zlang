@@ -1,61 +1,82 @@
 use crate::token::{Kind, Token};
 
 pub enum ExprType {
-    Literal(Kind),
-    Binary(Kind),
-    Unary(Kind),
-    Variable(Kind),
-    Logical(Kind),
+    Literal,
+    Binary,
+    Unary,
+    Variable,
+    Logical,
     Grouping,
     Call,
     Assign,
-    Get(Kind),
+    Get,
     Set,
-    This(Kind),
-    Super(Kind),
+    This,
+    Super,
 }
 
 pub struct Expr {
     pub kind: ExprType,
+    pub token: Token,
     pub left: Option<Box<Expr>>,
     pub right: Option<Box<Expr>>,
     pub list: Option<Vec<Expr>>,
 }
 
-#[macro_export]
-macro_rules! new_expr {
-    ($kind: expr) => {
-        Expr {
-            kind: $kind,
-            left: None,
-            right: None,
-            list: None,
-        }
+pub fn liternal(t: Token) -> Expr {
+    Expr {
+        kind: ExprType::Literal,
+        token: t,
+        left: None,
+        right: None,
+        list: None,
+    }
+}
+
+pub fn single(t: Token, left: Expr) -> Expr {
+    let kind = match t.kind {
+        Kind::Minus | Kind::Bang => ExprType::Unary,
+        Kind::LeftParen => ExprType::Grouping,
+        Kind::Var => ExprType::Variable,
+        Kind::Equal => ExprType::Assign,
+        _ => panic!("unexpected token type: {:?}", t),
     };
-    ($kind: expr, $left: expr) => {
-        Expr {
-            kind: $kind,
-            left: $left,
-            right: None,
-            list: None,
-        }
+
+    Expr {
+        kind,
+        token: t,
+        left: Some(Box::new(left)),
+        right: None,
+        list: None,
+    }
+}
+
+pub fn double(t: Token, left: Expr, right: Expr) -> Expr {
+    let kind = match t.kind {
+        Kind::Slash | Kind::Star | Kind::Minus | Kind::Plus => ExprType::Binary,
+        Kind::Dot => ExprType::Get,
+        Kind::Equal => ExprType::Set,
+        Kind::And | Kind::Or => ExprType::Logical,
+        _ => panic!("unexpected token type: {:?}", t),
     };
-    ($kind: expr, $left: expr, $right: expr) => {
-        Expr {
-            kind: $kind,
-            left: $left,
-            right: $right,
-            list: None,
-        }
-    };
-    ($kind: expr, $left: expr, $right: expr, $list: expr) => {
-        Expr {
-            kind: $kind,
-            left: $left,
-            right: $right,
-            list: $list,
-        }
-    };
+
+    Expr {
+        kind,
+        token: t,
+        left: Some(Box::new(left)),
+        right: Some(Box::new(right)),
+        list: None,
+    }
+}
+
+pub fn list(t: Token, left: Expr, list: Vec<Expr>) -> Expr {
+    Expr {
+        kind: ExprType::Call,
+        token: t,
+        left: Some(Box::new(left)),
+        right: None,
+        list: Some(list),
+    }
 }
 
 pub enum Stmt {
