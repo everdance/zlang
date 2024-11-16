@@ -1,18 +1,18 @@
-use crate::token::{Token, TokenKind};
+use crate::token::{Kind, Token};
 
 pub enum ExprType {
-    Literal(TokenKind),
-    Binary(TokenKind),
-    Unary(TokenKind),
-    Variable(TokenKind),
-    Logical(TokenKind),
+    Literal(Kind),
+    Binary(Kind),
+    Unary(Kind),
+    Variable(Kind),
+    Logical(Kind),
     Grouping,
     Call,
     Assign,
-    Get(TokenKind),
+    Get(Kind),
     Set,
-    This(TokenKind),
-    Super(TokenKind),
+    This(Kind),
+    Super(Kind),
 }
 
 pub struct Expr {

@@ -1,6 +1,6 @@
 use crate::expr::{Expr, ExprType, Stmt};
 use crate::new_expr;
-use crate::token::{Token, TokenKind, TokenKind::*};
+use crate::token::{Kind, Kind::*, Token};
 
 pub struct Parser;
 
@@ -29,31 +29,15 @@ struct ParseState<'a> {
     stmts: Vec<Stmt>,
 }
 
-/// statement ordering
-/// group 1: high level language syntax
-///          function, class, variable definition
-/// group 2: common control flow
-///          if, for, while, block, return
-/// group 3: fundamental expressions (priority ascending ordered)
-///          assign, set object field
-///          or
-///          and
-///          equality
-///          comparison
-///          binary(+-)
-///          binary(*/)
-///          unary(!,-)
-///          call
-///          super, this, identifer, grouping
-///          number, string, bool, nil
-
 impl ParseState<'_> {
+    /// group 1: high level language syntax
+    ///          function, class, variable definition
     fn parse(&mut self) -> Result<Stmt, String> {
         if let Some(token) = self.peek() {
             return match token.kind {
-                TokenKind::Class => self.class(),
-                TokenKind::Fun => self.func(),
-                TokenKind::Var => self.var(),
+                Kind::Class => self.class(),
+                Kind::Fun => self.func(),
+                Kind::Var => self.var(),
                 _ => self.stmt(),
             };
         }
@@ -73,14 +57,16 @@ impl ParseState<'_> {
         Err("to implement".to_string())
     }
 
+    /// group 2: common control flow
+    ///          if, for, while, block, return
     fn stmt(&mut self) -> Result<Stmt, String> {
-        if self.matches(TokenKind::If) {
+        if self.matches(Kind::If) {
             return self.ifstmt();
-        } else if self.matches(TokenKind::For) {
+        } else if self.matches(Kind::For) {
             return self.forstmt();
-        } else if self.matches(TokenKind::While) {
+        } else if self.matches(Kind::While) {
             return self.whilestmt();
-        } else if self.matches(TokenKind::LeftBrace) {
+        } else if self.matches(Kind::LeftBrace) {
             return self.blockstmt();
         } else {
             return self.exprstmt();
@@ -110,10 +96,22 @@ impl ParseState<'_> {
         }
     }
 
+    /// group 3: fundamental expressions (priority ascending ordered)
+    ///          assign, set
+    ///          or
+    ///          and
+    ///          equality
+    ///          comparison
+    ///          binary(+-)
+    ///          binary(*/)
+    ///          unary(!,-)
+    ///          call
+    ///          super, this, identifer, grouping
+    ///          number, string, bool, nil, etc
     fn expr(&mut self) -> Result<Expr, String> {
         match self.or() {
             Ok(expr) => {
-                if self.matches(TokenKind::Equal) {
+                if self.matches(Kind::Equal) {
                     match self.expr() {
                         Ok(val) => match expr.kind {
                             ExprType::Variable(_) => {
@@ -303,20 +301,25 @@ impl ParseState<'_> {
 
         let mut expr = res.unwrap();
         loop {
-            if self.matches(LeftParen) {
-                match self.make_call(expr) {
+            let suffix = self.peek();
+            if suffix == None {
+                break;
+            }
+
+            match suffix.unwrap().kind {
+                LeftParen => match self.make_call(expr) {
                     Ok(call) => expr = call,
                     Err(msg) => return Err(msg),
+                },
+                Dot => {
+                    if self.matches(Identifier("".to_string())) {
+                        let token = self.prev().unwrap().kind.clone();
+                        expr = new_expr!(ExprType::Get(token), Some(Box::new(expr)));
+                    } else {
+                        return Err("Expect identifier after dot".to_string());
+                    }
                 }
-            } else if self.matches(Dot) {
-                if self.matches(Identifier("".to_string())) {
-                    let token = self.prev().unwrap().kind.clone();
-                    expr = new_expr!(ExprType::Get(token), Some(Box::new(expr)));
-                } else {
-                    return Err("Expect property name after dot".to_string());
-                }
-            } else {
-                break;
+                _ => break,
             }
         }
 
@@ -355,35 +358,38 @@ impl ParseState<'_> {
 
     // literals
     fn primary(&mut self) -> Result<Expr, String> {
-        if let Some(token) = self.next() {
-            return match token.kind {
-                StrLiteral(_) | NumLiteral(_) | True | False | Nil => {
-                    Ok(new_expr!(ExprType::Literal(token.kind.clone())))
-                }
-
-                Identifier(_) => Ok(new_expr!(ExprType::Variable(token.kind.clone()))),
-
-                LeftParen => match self.expr() {
-                    Ok(subexpr) => {
-                        if self.matches(RightParen) {
-                            Ok(new_expr!(ExprType::Grouping, Some(Box::new(subexpr))))
-                        } else {
-                            Err("missing right paren after expression".to_string())
-                        }
-                    }
-                    Err(msg) => Err(msg),
-                },
-                // TODO: super, this
-                _ => Err("".to_string()),
-            };
+        let res = self.next();
+        if res == None {
+            return Err("unexpected end".to_string());
         }
 
-        Err("to implement".to_string())
+        let token = res.unwrap();
+
+        match token.kind {
+            StrLiteral(_) | NumLiteral(_) | True | False | Nil => {
+                Ok(new_expr!(ExprType::Literal(token.kind.clone())))
+            }
+
+            Identifier(_) => Ok(new_expr!(ExprType::Variable(token.kind.clone()))),
+
+            LeftParen => match self.expr() {
+                Ok(sub) => {
+                    if self.matches(RightParen) {
+                        Ok(new_expr!(ExprType::Grouping, Some(Box::new(sub))))
+                    } else {
+                        Err("missing right paren after expression".to_string())
+                    }
+                }
+                Err(msg) => Err(msg),
+            },
+            // TODO: super, this
+            _ => Err("".to_string()),
+        }
     }
 
-    fn matches(&mut self, kind: TokenKind) -> bool {
+    fn matches(&mut self, kind: Kind) -> bool {
         if let Some(token) = self.peek() {
-            if token.kind == kind {
+            if token.kind.type_eq(&kind) {
                 self.next();
                 return true;
             }
@@ -392,7 +398,7 @@ impl ParseState<'_> {
         false
     }
 
-    fn matches_any(&mut self, kinds: Vec<TokenKind>) -> bool {
+    fn matches_any(&mut self, kinds: Vec<Kind>) -> bool {
         for k in kinds {
             if self.matches(k) {
                 return true;

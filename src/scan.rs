@@ -1,6 +1,6 @@
 use std::{iter::Peekable, str::CharIndices, usize};
 
-use crate::token::{TokenKind::*, *};
+use crate::token::{Kind::*, *};
 
 pub struct Scanner;
 
@@ -104,7 +104,7 @@ impl ScanState<'_> {
         }
     }
 
-    fn slash(&mut self) -> TokenKind {
+    fn slash(&mut self) -> Kind {
         match self.peek() {
             Some(c) => {
                 // comments
@@ -123,7 +123,7 @@ impl ScanState<'_> {
         }
     }
 
-    fn get_string(&mut self) -> Result<TokenKind, String> {
+    fn get_string(&mut self) -> Result<Kind, String> {
         let mut s = vec![];
 
         while let Some(c) = self.next() {
@@ -137,7 +137,7 @@ impl ScanState<'_> {
         Err(format!("unterminated string '{str}'"))
     }
 
-    fn get_number(&mut self, start: char) -> Result<TokenKind, String> {
+    fn get_number(&mut self, start: char) -> Result<Kind, String> {
         let mut number_str = vec![start];
         let mut invalid_chars: Vec<char> = vec![]; // invalid suffix chars
         let mut invalid_pos = 0;
@@ -186,7 +186,7 @@ impl ScanState<'_> {
         }
     }
 
-    fn get_identifer(&mut self, start: char) -> Result<TokenKind, String> {
+    fn get_identifer(&mut self, start: char) -> Result<Kind, String> {
         let mut s = vec![start];
         let mut invalid_chars: Vec<char> = vec![]; // invalid suffix chars
         let mut invalid_pos = 0;
@@ -244,7 +244,7 @@ impl ScanState<'_> {
         Ok(kind)
     }
 
-    fn equal_token(&mut self, c: char) -> TokenKind {
+    fn equal_token(&mut self, c: char) -> Kind {
         let mut next_equal = false;
 
         if let Some(next) = self.peek() {
