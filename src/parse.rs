@@ -147,11 +147,17 @@ impl ParseState<'_> {
     //          if, for, while, block, return
     fn stmt(&mut self) -> Result<Stmt, String> {
         if self.matches(Kind::If) {
-            return self.ifstmt();
+            match self.ifwhilestmt() {
+                Ok((epr, stmt)) => Ok(Stmt::If(epr, Box::new(stmt))),
+                Err(msg) => Err(msg),
+            }
         } else if self.matches(Kind::For) {
             return self.forstmt();
         } else if self.matches(Kind::While) {
-            return self.whilestmt();
+            match self.ifwhilestmt() {
+                Ok((epr, stmt)) => Ok(Stmt::While(epr, Box::new(stmt))),
+                Err(msg) => Err(msg),
+            }
         } else if self.matches(Kind::LeftBrace) {
             return self.blockstmt();
         } else {
@@ -159,35 +165,70 @@ impl ParseState<'_> {
         }
     }
 
-    fn ifstmt(&mut self) -> Result<Stmt, String> {
+    fn forstmt(&mut self) -> Result<Stmt, String> {
         if !self.matches(LeftParen) {
             return Err("expect left paren for if condition".to_string());
+        }
+
+        let mut exprs = vec![];
+        loop {
+            if self.matches(RightParen) {
+                break;
+            }
+
+            if self.matches(Semicolon) {
+                continue;
+            }
+
+            if self.matches(Var) {
+                if exprs.len() != 0 {
+                    return Err("unexpected var definition in for".to_string());
+                }
+
+                match self.var() {
+                    Ok(def) => exprs.push(def),
+                    Err(msg) => return Err(msg),
+                }
+            } else {
+                match self.exprstmt() {
+                    Ok(epx) => exprs.push(epx),
+                    Err(msg) => return Err(msg),
+                }
+            }
+        }
+
+        if exprs.len() != 1 && exprs.len() != 3 {
+            return Err("unexpected for expression conditions".to_string());
+        }
+
+        if let Ok(stmt) = self.exprstmt() {
+            Ok(Stmt::For(exprs, Box::new(stmt)))
+        } else {
+            Err("expect statement".to_string())
+        }
+    }
+
+    fn ifwhilestmt(&mut self) -> Result<(Expr, Stmt), String> {
+        if !self.matches(LeftParen) {
+            return Err("expect left paren".to_string());
         }
 
         match self.exprstmt() {
             Ok(Stmt::Expr(cond)) => {
                 if !self.matches(RightParen) {
-                    return Err("expect right paren for if condition".to_string());
+                    return Err("expect right paren".to_string());
                 }
 
                 // block or single expression
                 if let Ok(stmt) = self.exprstmt() {
-                    Ok(Stmt::If(cond, Box::new(stmt)))
+                    Ok((cond, stmt))
                 } else {
-                    Err("expect statement for if expression".to_string())
+                    Err("expect statement".to_string())
                 }
             }
             Err(msg) => Err(msg),
             _ => Err("unreachable branch".to_string()),
         }
-    }
-
-    fn forstmt(&mut self) -> Result<Stmt, String> {
-        Err("to implement".to_string())
-    }
-
-    fn whilestmt(&mut self) -> Result<Stmt, String> {
-        Err("to implement".to_string())
     }
 
     fn blockstmt(&mut self) -> Result<Stmt, String> {

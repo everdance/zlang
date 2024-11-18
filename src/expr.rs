@@ -91,6 +91,7 @@ pub enum Stmt {
     Var(Token, Option<Expr>),
     Return(Token, Expr),
     If(Expr, Box<Stmt>),
+    For(Vec<Stmt>, Box<Stmt>),
     Block(Vec<Stmt>),
     While(Expr, Box<Stmt>),
     Fun(Token, Vec<Token>, Vec<Stmt>),
