@@ -88,7 +88,7 @@ pub fn list(t: Token, left: Expr, list: Vec<Expr>) -> Expr {
 
 pub enum Stmt {
     Expr(Expr),
-    Var(Token, Expr),
+    Var(Token, Option<Expr>),
     Return(Token, Expr),
     If(Expr, Box<Stmt>),
     Block(Vec<Stmt>),

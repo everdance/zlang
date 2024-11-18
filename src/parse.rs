@@ -32,28 +32,115 @@ impl ParseState<'_> {
     // group 1: high level language syntax
     //          function, class, variable definition
     fn parse(&mut self) -> Result<Stmt, String> {
-        if let Some(token) = self.peek() {
-            return match token.kind {
-                Kind::Class => self.class(),
-                Kind::Fun => self.func(),
-                Kind::Var => self.var(),
-                _ => self.stmt(),
-            };
+        if self.matches(Kind::Class) {
+            self.class()
+        } else if self.matches(Kind::Fun) {
+            self.func()
+        } else if self.matches(Kind::Var) {
+            self.var()
+        } else {
+            self.stmt()
         }
-
-        Err("empty tokens to parse".to_string())
     }
 
     fn class(&mut self) -> Result<Stmt, String> {
-        Err("to implement".to_string())
+        let res = self.next();
+        if res == None {
+            return Err("unexpected end for class".to_string());
+        }
+
+        let token = res.unwrap().clone();
+        if !self.matches(LeftBrace) {
+            return Err("expect left brace for class definition".to_string());
+        }
+
+        let mut stmts = vec![];
+        loop {
+            if self.matches(RightBrace) {
+                break;
+            }
+
+            let res;
+
+            if self.matches(Kind::Var) {
+                res = self.var();
+            } else if self.matches(Kind::Fun) {
+                res = self.func();
+            } else {
+                return Err("Unexpected statement start token in class definition".to_string());
+            }
+
+            if let Ok(stmt) = res {
+                stmts.push(stmt);
+            } else {
+                return res;
+            }
+        }
+
+        Ok(Stmt::Class(token, stmts))
     }
 
     fn func(&mut self) -> Result<Stmt, String> {
-        Err("to implement".to_string())
+        let res = self.next();
+        if res == None {
+            return Err("unexpected end for function".to_string());
+        }
+
+        let token = res.unwrap().clone();
+        match token.kind {
+            Identifier(_) => {
+                if !self.matches(LeftParen) {
+                    return Err("expect left paren for argument list".to_string());
+                }
+
+                let mut params = vec![];
+                loop {
+                    if self.matches(RightParen) {
+                        break;
+                    }
+
+                    if self.matches(Comma) {
+                        continue;
+                    }
+
+                    if let Some(param) = self.next() {
+                        params.push(param.clone());
+                    } else {
+                        return Err("unexpected function params end".to_string());
+                    }
+                }
+
+                if !self.matches(LeftBrace) {
+                    return Err("expect left brace for function body".to_string());
+                }
+
+                let mut stmts = vec![];
+
+                loop {
+                    if self.matches(RightBrace) {
+                        break;
+                    }
+                    match self.stmt() {
+                        Ok(st) => stmts.push(st),
+                        Err(msg) => return Err(msg),
+                    }
+                }
+                Ok(Stmt::Fun(token, params, stmts))
+            }
+            _ => Err("expect identifer after fun".to_string()),
+        }
     }
 
     fn var(&mut self) -> Result<Stmt, String> {
-        Err("to implement".to_string())
+        if let Ok(epx) = self.expr() {
+            match epx.kind {
+                ExprType::Variable => Ok(Stmt::Var(epx.token, None)),
+                ExprType::Assign => Ok(Stmt::Var(epx.token, Some(*epx.left.unwrap()))),
+                _ => Err("unexpected expression after var".to_string()),
+            }
+        } else {
+            Err("expect variable definition after var".to_string())
+        }
     }
 
     // group 2: common control flow
@@ -73,25 +160,25 @@ impl ParseState<'_> {
     }
 
     fn ifstmt(&mut self) -> Result<Stmt, String> {
-        if self.matches(LeftParen) {
-            match self.exprstmt() {
-                Ok(Stmt::Expr(cond)) => {
-                    if self.matches(RightParen) {
-                        // block or single expression
-                        if let Ok(stmt) = self.exprstmt() {
-                            Ok(Stmt::If(cond, Box::new(stmt)))
-                        } else {
-                            Err("expect right paren after if expression".to_string())
-                        }
-                    } else {
-                        Err("expect right paren after if expression".to_string())
-                    }
+        if !self.matches(LeftParen) {
+            return Err("expect left paren for if condition".to_string());
+        }
+
+        match self.exprstmt() {
+            Ok(Stmt::Expr(cond)) => {
+                if !self.matches(RightParen) {
+                    return Err("expect right paren for if condition".to_string());
                 }
-                Err(msg) => Err(msg),
-                _ => Err("no match".to_string()),
+
+                // block or single expression
+                if let Ok(stmt) = self.exprstmt() {
+                    Ok(Stmt::If(cond, Box::new(stmt)))
+                } else {
+                    Err("expect statement for if expression".to_string())
+                }
             }
-        } else {
-            Err("expect left paren after if".to_string())
+            Err(msg) => Err(msg),
+            _ => Err("unreachable branch".to_string()),
         }
     }
 
@@ -406,7 +493,8 @@ impl ParseState<'_> {
     }
 
     fn next(&mut self) -> Option<&Token> {
-        if self.cursor < self.tokens.len() {
+        if self.cursor < self.tokens.len() - 1 {
+            self.cursor += 1;
             return self.tokens.get(self.cursor);
         }
         None
