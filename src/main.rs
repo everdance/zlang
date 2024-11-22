@@ -11,7 +11,11 @@ fn main() {
     let (tokens, issues) = Scanner::scan(s);
     assert_eq!(issues.len(), 0);
     match Parser::parse(&tokens) {
-        Ok(stmts) => println!("{:?}", stmts),
-        Err(e) => println!("{:?}", e),
+        Ok(stmts) => {
+            for stmt in stmts.iter() {
+                println!("{}", stmt)
+            }
+        }
+        Err(e) => println!("{}", e),
     };
 }

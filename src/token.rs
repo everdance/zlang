@@ -13,6 +13,16 @@ impl fmt::Display for Token {
     }
 }
 
+impl Token {
+    pub fn val(&self) -> String {
+        match self.kind.clone() {
+            Kind::Identifier(x) | Kind::StrLiteral(x) => x,
+            Kind::NumLiteral(y) => y.to_string(),
+            _ => "".to_string(),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Kind {
     LeftParen,
