@@ -12,6 +12,10 @@ impl Parser {
         };
 
         while state.cursor < tokens.len() {
+            if state.matches_any(vec![Kind::Comment, Kind::Semicolon]) {
+                continue;
+            }
+
             match state.parse() {
                 Ok(stmt) => state.stmts.push(stmt),
                 Err(msg) => return Err(msg),
@@ -44,12 +48,14 @@ impl ParseState<'_> {
     }
 
     fn class(&mut self) -> Result<Stmt, String> {
-        let res = self.next();
-        if res == None {
-            return Err("unexpected end for class".to_string());
+        let token: Token;
+
+        if self.matches(Identifier("".to_string())) {
+            token = self.prev().unwrap().clone();
+        } else {
+            return Err("expect class identifier".to_string());
         }
 
-        let token = res.unwrap().clone();
         if !self.matches(LeftBrace) {
             return Err("expect left brace for class definition".to_string());
         }
@@ -67,7 +73,8 @@ impl ParseState<'_> {
             } else if self.matches(Kind::Fun) {
                 res = self.func();
             } else {
-                return Err("Unexpected statement start token in class definition".to_string());
+                let token = self.cur().unwrap();
+                return Err(format!("unexpected token {} in class definition", token).to_string());
             }
 
             if let Ok(stmt) = res {
@@ -81,65 +88,64 @@ impl ParseState<'_> {
     }
 
     fn func(&mut self) -> Result<Stmt, String> {
-        let res = self.next();
-        if res == None {
-            return Err("unexpected end for function".to_string());
+        let token: Token;
+
+        if self.matches(Identifier("".to_string())) {
+            token = self.prev().unwrap().clone();
+        } else {
+            return Err("expect fun identifier".to_string());
         }
 
-        let token = res.unwrap().clone();
-        match token.kind {
-            Identifier(_) => {
-                if !self.matches(LeftParen) {
-                    return Err("expect left paren for argument list".to_string());
-                }
+        if !self.matches(LeftParen) {
+            return Err("expect left paren for argument list".to_string());
+        }
 
-                let mut params = vec![];
-                loop {
-                    if self.matches(RightParen) {
-                        break;
-                    }
-
-                    if self.matches(Comma) {
-                        continue;
-                    }
-
-                    if let Some(param) = self.next() {
-                        params.push(param.clone());
-                    } else {
-                        return Err("unexpected function params end".to_string());
-                    }
-                }
-
-                if !self.matches(LeftBrace) {
-                    return Err("expect left brace for function body".to_string());
-                }
-
-                let mut stmts = vec![];
-
-                loop {
-                    if self.matches(RightBrace) {
-                        break;
-                    }
-                    match self.stmt() {
-                        Ok(st) => stmts.push(st),
-                        Err(msg) => return Err(msg),
-                    }
-                }
-                Ok(Stmt::Fun(token, params, stmts))
+        let mut params = vec![];
+        loop {
+            if self.matches(RightParen) {
+                break;
             }
-            _ => Err("expect identifer after fun".to_string()),
+
+            if self.matches(Comma) {
+                continue;
+            }
+
+            if let Some(param) = self.next() {
+                params.push(param.clone());
+            } else {
+                return Err("unexpected end of paramater definition".to_string());
+            }
         }
+
+        if !self.matches(LeftBrace) {
+            return Err("expect left brace for function body".to_string());
+        }
+
+        let mut stmts = vec![];
+
+        loop {
+            if self.matches(RightBrace) {
+                break;
+            }
+            match self.stmt() {
+                Ok(st) => stmts.push(st),
+                Err(msg) => return Err(msg),
+            }
+        }
+        Ok(Stmt::Fun(token, params, stmts))
     }
 
     fn var(&mut self) -> Result<Stmt, String> {
-        if let Ok(epx) = self.expr() {
-            match epx.kind {
+        match self.expr() {
+            Ok(epx) => match epx.kind {
                 ExprType::Variable => Ok(Stmt::Var(epx.token, None)),
-                ExprType::Assign => Ok(Stmt::Var(epx.token, Some(*epx.left.unwrap()))),
-                _ => Err("unexpected expression after var".to_string()),
-            }
-        } else {
-            Err("expect variable definition after var".to_string())
+                ExprType::Assign => Ok(Stmt::Var(
+                    epx.left.unwrap().token,
+                    Some(*epx.right.unwrap()),
+                )),
+                x => Err(format!("unexpected expression after var: {:?}", x).to_string()),
+            },
+            Err(msg) => Err(msg),
         }
     }
 
@@ -238,6 +244,7 @@ impl ParseState<'_> {
             if self.matches(RightBrace) {
                 break;
             }
+
             match self.stmt() {
                 Ok(st) => stmts.push(st),
                 Err(msg) => return Err(msg),
@@ -268,19 +275,21 @@ impl ParseState<'_> {
     //           number, string, bool, nil, etc
     fn expr(&mut self) -> Result<Expr, String> {
         match self.or() {
-            Ok(epx) => {
+            Ok(left) => {
                 if self.matches(Kind::Equal) {
-                    let t = self.prev().unwrap().clone();
+                    let eq = self.prev().unwrap().clone();
                     match self.expr() {
-                        Ok(val) => match epx.kind {
-                            ExprType::Variable => Ok(expr::single(t, val)), // assign
-                            ExprType::Get => Ok(expr::double(t, epx, val)), // set
-                            _ => return Err("invalid assignment".to_string()),
+                        Ok(val) => match val.kind {
+                            ExprType::Variable | ExprType::Literal => {
+                                Ok(expr::binary(eq, left, val))
+                            } // assign
+                            ExprType::Get => Ok(expr::binary(eq, left, val)), // set
+                            k => return Err(format!("invalid type: {:?}", k).to_string()),
                         },
                         Err(e) => return Err(e),
                     }
                 } else {
-                    return Ok(epx);
+                    return Ok(left);
                 }
             }
             Err(e) => Err(e),
@@ -295,9 +304,9 @@ impl ParseState<'_> {
 
         let mut epx = res.unwrap();
         while self.matches(Or) {
-            let t = self.prev().unwrap().clone();
+            let or = self.prev().unwrap().clone();
             match self.and() {
-                Ok(right) => epx = expr::double(t, epx, right),
+                Ok(right) => epx = expr::binary(or, epx, right),
                 Err(msg) => return Err(msg),
             }
         }
@@ -313,9 +322,9 @@ impl ParseState<'_> {
 
         let mut epx = res.unwrap();
         while self.matches(And) {
-            let t = self.prev().unwrap().clone();
+            let and = self.prev().unwrap().clone();
             match self.equal() {
-                Ok(right) => epx = expr::double(t, epx, right),
+                Ok(right) => epx = expr::binary(and, epx, right),
                 Err(msg) => return Err(msg),
             }
         }
@@ -332,9 +341,9 @@ impl ParseState<'_> {
 
         let mut epx = res.unwrap();
         while self.matches_any(vec![BangEqual, DoubleEqual]) {
-            let t = self.prev().unwrap().clone();
+            let eqx = self.prev().unwrap().clone();
             match self.compare() {
-                Ok(right) => epx = expr::double(t, epx, right),
+                Ok(right) => epx = expr::binary(eqx, epx, right),
                 Err(msg) => return Err(msg),
             }
         }
@@ -353,7 +362,7 @@ impl ParseState<'_> {
         while self.matches_any(vec![Greater, GreaterEqual, Less, LessEqual]) {
             let t = self.prev().unwrap().clone();
             match self.term() {
-                Ok(right) => epx = expr::double(t, epx, right),
+                Ok(right) => epx = expr::binary(t, epx, right),
                 Err(msg) => return Err(msg),
             }
         }
@@ -372,7 +381,7 @@ impl ParseState<'_> {
         while self.matches_any(vec![Minus, Plus]) {
             let t = self.prev().unwrap().clone();
             match self.factor() {
-                Ok(right) => epx = expr::double(t, epx, right),
+                Ok(right) => epx = expr::binary(t, epx, right),
                 Err(msg) => return Err(msg),
             }
         }
@@ -391,7 +400,7 @@ impl ParseState<'_> {
         while self.matches_any(vec![Slash, Star]) {
             let t = self.prev().unwrap().clone();
             match self.unary() {
-                Ok(opr) => epx = expr::double(t, epx, opr),
+                Ok(opr) => epx = expr::binary(t, epx, opr),
                 Err(msg) => return Err(msg),
             }
         }
@@ -405,7 +414,7 @@ impl ParseState<'_> {
             let t = self.prev().unwrap().clone();
 
             return match self.unary() {
-                Ok(opr) => Ok(expr::single(t, opr)),
+                Ok(opr) => Ok(expr::unary(t, opr)),
                 Err(msg) => Err(msg),
             };
         }
@@ -435,7 +444,7 @@ impl ParseState<'_> {
                 Dot => {
                     if self.matches(Identifier("".to_string())) {
                         let token = self.prev().unwrap().clone();
-                        epx = expr::single(token, epx);
+                        epx = expr::unary(token, epx);
                     } else {
                         return Err("Expect identifier after dot".to_string());
                     }
@@ -474,22 +483,23 @@ impl ParseState<'_> {
 
     // literals
     fn primary(&mut self) -> Result<Expr, String> {
-        let res = self.next();
+        let res = self.cur();
         if res == None {
-            return Err("unexpected end".to_string());
+            return Err(format!("expect primary, cursor:{}", self.cursor).to_string());
         }
 
         let token = res.unwrap().clone();
+        self.next();
 
         match token.kind {
             Identifier(_) | StrLiteral(_) | NumLiteral(_) | True | False | Nil => {
-                Ok(expr::literal(token))
+                Ok(expr::single(token))
             }
 
             LeftParen => match self.expr() {
                 Ok(sub) => {
                     if self.matches(RightParen) {
-                        Ok(expr::single(token, sub))
+                        Ok(expr::unary(token, sub))
                     } else {
                         Err("missing right paren after expression".to_string())
                     }
@@ -497,24 +507,25 @@ impl ParseState<'_> {
                 Err(msg) => Err(msg),
             },
 
-            This => Ok(expr::literal(token)),
+            This => Ok(expr::single(token)),
 
             Super => {
                 if self.matches(Dot) {
                     match self.expr() {
-                        Ok(method) => Ok(expr::single(token, method)),
+                        Ok(method) => Ok(expr::unary(token, method)),
                         Err(msg) => Err(msg),
                     }
                 } else {
                     Err("missing dot after super".to_string())
                 }
             }
-            _ => Err("".to_string()),
+
+            x => Err(format!("unexpected primary token:{}", x).to_string()),
         }
     }
 
     fn matches(&mut self, kind: Kind) -> bool {
-        if let Some(token) = self.peek() {
+        if let Some(token) = self.cur() {
             if token.kind.type_eq(&kind) {
                 self.next();
                 return true;
@@ -534,11 +545,15 @@ impl ParseState<'_> {
     }
 
     fn next(&mut self) -> Option<&Token> {
-        if self.cursor < self.tokens.len() - 1 {
-            self.cursor += 1;
+        self.cursor += 1;
+        if self.cursor < self.tokens.len() {
             return self.tokens.get(self.cursor);
         }
         None
+    }
+
+    fn cur(&self) -> Option<&Token> {
+        return self.tokens.get(self.cursor);
     }
 
     fn peek(&self) -> Option<&Token> {

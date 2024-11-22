@@ -1,5 +1,6 @@
 use crate::token::{Kind, Token};
 
+#[derive(Debug, PartialEq)]
 pub enum ExprType {
     Literal,
     Binary,
@@ -15,6 +16,7 @@ pub enum ExprType {
     Super,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct Expr {
     pub kind: ExprType,
     pub token: Token,
@@ -23,7 +25,7 @@ pub struct Expr {
     pub list: Option<Vec<Expr>>,
 }
 
-pub fn literal(t: Token) -> Expr {
+pub fn single(t: Token) -> Expr {
     let kind = match t.kind {
         Kind::Var => ExprType::Variable,
         Kind::This => ExprType::This,
@@ -39,11 +41,10 @@ pub fn literal(t: Token) -> Expr {
     }
 }
 
-pub fn single(t: Token, opr: Expr) -> Expr {
+pub fn unary(t: Token, opr: Expr) -> Expr {
     let kind = match t.kind {
         Kind::Minus | Kind::Bang => ExprType::Unary,
         Kind::LeftParen => ExprType::Grouping,
-        Kind::Equal => ExprType::Assign,
         Kind::Identifier(_) => ExprType::Get,
         Kind::Super => ExprType::Super,
         _ => panic!("unexpected token type: {:?}", t),
@@ -58,11 +59,14 @@ pub fn single(t: Token, opr: Expr) -> Expr {
     }
 }
 
-pub fn double(t: Token, left: Expr, right: Expr) -> Expr {
+pub fn binary(t: Token, left: Expr, right: Expr) -> Expr {
     let kind = match t.kind {
         Kind::Slash | Kind::Star | Kind::Minus | Kind::Plus => ExprType::Binary,
         Kind::Dot => ExprType::Get,
-        Kind::Equal => ExprType::Set,
+        Kind::Equal => match right.kind {
+            ExprType::Variable | ExprType::Literal => ExprType::Assign,
+            _ => ExprType::Set,
+        },
         Kind::And | Kind::Or => ExprType::Logical,
         _ => panic!("unexpected token type: {:?}", t),
     };
@@ -86,10 +90,11 @@ pub fn list(t: Token, left: Expr, list: Vec<Expr>) -> Expr {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub enum Stmt {
     Expr(Expr),
     Var(Token, Option<Expr>),
-    Return(Token, Expr),
+    //Return(Token, Expr),
     If(Expr, Box<Stmt>),
     For(Vec<Stmt>, Box<Stmt>),
     Block(Vec<Stmt>),
