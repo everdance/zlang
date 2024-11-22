@@ -140,7 +140,7 @@ impl fmt::Display for Stmt {
             Stmt::Var(t, None) => write!(f, "Var({})", t),
             Stmt::Var(t, Some(expr)) => write!(f, "Var({},{})", t, expr),
             Stmt::If(expr, stmts) => write!(f, "If({},{})", expr, stmts),
-            Stmt::For(list, stmts) => write!(f, "For({},{})", to_string(list), stmts),
+            Stmt::For(list, stmts) => write!(f, "For([{}],{})", to_string(list), stmts),
             Stmt::Block(list) => write!(f, "Block({})", to_string(list)),
             Stmt::While(expr, stmts) => write!(f, "While({},{})", expr, stmts),
             Stmt::Fun(t, tokens, stmts) => {
@@ -151,9 +151,9 @@ impl fmt::Display for Stmt {
                     .trim_end_matches(",")
                     .to_string();
 
-                write!(f, "Func({},{},{})", t, params, to_string(stmts))
+                write!(f, "Func({},{},[{}])", t, params, to_string(stmts))
             }
-            Stmt::Class(t, stmts) => write!(f, "Class({},{})", t, to_string(stmts)),
+            Stmt::Class(t, stmts) => write!(f, "Class({},[{}])", t, to_string(stmts)),
         }
     }
 }
