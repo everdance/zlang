@@ -125,7 +125,7 @@ pub enum Stmt {
     Class(Token, Vec<Stmt>),
 }
 
-fn to_string(list: &Vec<Stmt>) -> String {
+pub fn to_string(list: &Vec<Stmt>) -> String {
     list.iter()
         .map(|x| x.to_string() + ",")
         .collect::<String>()

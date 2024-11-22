@@ -1,12 +1,25 @@
 use crate::expr::{self, Expr, ExprType, Stmt};
+use crate::scan::Scanner;
 use crate::token::{Kind, Kind::*, Token};
 
 pub struct Parser;
 
 impl Parser {
-    pub fn parse(tokens: &[Token]) -> Result<Vec<Stmt>, String> {
+    pub fn parse(s: &str) -> Result<Vec<Stmt>, String> {
+        let (tokens, issues) = Scanner::scan(s);
+
+        if !issues.is_empty() {
+            let msg = issues
+                .iter()
+                .map(|i| i.to_string() + ",")
+                .collect::<String>()
+                .trim_end_matches(",")
+                .to_string();
+            return Err(msg);
+        }
+
         let mut state = ParseState {
-            tokens,
+            tokens: &tokens,
             cursor: 0,
             stmts: vec![],
         };
@@ -568,5 +581,33 @@ impl ParseState<'_> {
             return self.tokens.get(self.cursor - 1);
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use expr::to_string;
+
+    #[test]
+    fn var_def() {
+        let s = "var x = 1;// var definition";
+        match Parser::parse(s) {
+            Ok(stmts) => {
+                assert_eq!(to_string(&stmts), "Var(Identifier(\"x\"),Literal(1))")
+            }
+            Err(msg) => assert!(false, "parse var err:{}", msg),
+        }
+    }
+
+    #[test]
+    fn fun_def() {
+        let s = "fun multiply(x,y) { x*y }";
+        match Parser::parse(s) {
+            Ok(stmts) => {
+                assert_eq!(to_string(&stmts), "Var(Identifier(\"x\"),Literal(1))")
+            }
+            Err(msg) => assert!(false, "parse fun err:{}", msg),
+        }
     }
 }

@@ -1,4 +1,4 @@
-use std::{iter::Peekable, str::CharIndices, usize};
+use std::{fmt::Display, iter::Peekable, str::CharIndices, usize};
 
 use crate::token::{Kind::*, *};
 
@@ -42,6 +42,16 @@ pub struct Issue {
     pub line: usize,
     pub pos: usize,
     pub message: String,
+}
+
+impl Display for Issue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} (line #{}, col #{})",
+            self.message, self.line, self.pos
+        )
+    }
 }
 
 struct ScanState<'a> {
