@@ -88,7 +88,6 @@ pub fn unary(t: Token, opr: Expr) -> Expr {
     let kind = match t.kind {
         Kind::Minus | Kind::Bang => ExprType::Unary,
         Kind::LeftParen => ExprType::Grouping,
-        Kind::Identifier(_) => ExprType::Get,
         Kind::Super => ExprType::Super,
         _ => panic!("unexpected token type: {:?}", t),
     };
@@ -107,6 +106,7 @@ pub fn binary(t: Token, left: Expr, right: Expr) -> Expr {
         Kind::Slash
         | Kind::Star
         | Kind::DoubleEqual
+        | Kind::BangEqual
         | Kind::Greater
         | Kind::GreaterEqual
         | Kind::Less

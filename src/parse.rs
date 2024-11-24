@@ -457,25 +457,21 @@ impl ParseState<'_> {
 
         let mut epx = res.unwrap();
         loop {
-            let suffix = self.peek();
-            if suffix == None {
-                break;
-            }
-
-            match suffix.unwrap().kind {
-                LeftParen => match self.make_call(epx, suffix.unwrap().clone()) {
+            if self.matches(LeftParen) {
+                match self.make_call(epx, self.prev().unwrap().clone()) {
                     Ok(call) => epx = call,
                     Err(msg) => return Err(msg),
-                },
-                Dot => {
-                    if self.matches(Identifier("".to_string())) {
-                        let token = self.prev().unwrap().clone();
-                        epx = expr::unary(token, epx);
-                    } else {
-                        return Err("Expect identifier after dot".to_string());
-                    }
+                };
+            } else if self.matches(Dot) {
+                let dot = self.prev().unwrap().clone();
+                if self.matches(Identifier("".to_string())) {
+                    let right = expr::single(self.prev().unwrap().clone());
+                    epx = expr::binary(dot, epx, right);
+                } else {
+                    return Err("Expect identifier after dot".to_string());
                 }
-                _ => break,
+            } else {
+                break;
             }
         }
 
@@ -582,13 +578,6 @@ impl ParseState<'_> {
         return self.tokens.get(self.cursor);
     }
 
-    fn peek(&self) -> Option<&Token> {
-        if (self.cursor + 1) < self.tokens.len() {
-            return self.tokens.get(self.cursor + 1);
-        }
-        None
-    }
-
     fn prev(&self) -> Option<&Token> {
         if self.cursor > 0 {
             return self.tokens.get(self.cursor - 1);
@@ -658,6 +647,34 @@ mod tests {
                 assert_eq!(to_string(&stmts), "Func(multiply,<x,y>,[Star(x, y)])")
             }
             Err(msg) => assert!(false, "parse fun err:{}", msg),
+        }
+    }
+
+    #[test]
+    fn class_def() {
+        let s = "class Test { var x = 0\nfun set(x) { this.x = x } }";
+        match Parser::parse(s) {
+            Ok(stmts) => {
+                assert_eq!(
+                    to_string(&stmts),
+                    "Class(Test,[Var(x,0),Func(set,<x>,[Assign(Get(This, x), x)])])"
+                )
+            }
+            Err(msg) => assert!(false, "parse class err:{}", msg),
+        }
+    }
+
+    #[test]
+    fn expr() {
+        let s = "(x = (y == 3/2 or 2 != 1))";
+        match Parser::parse(s) {
+            Ok(stmts) => {
+                assert_eq!(
+                    to_string(&stmts),
+                    "Grouping(Set(x, Grouping(Or(DoubleEqual(y, Slash(3, 2)), BangEqual(2, 1)))))"
+                )
+            }
+            Err(msg) => assert!(false, "parse expr err:{}", msg),
         }
     }
 }
