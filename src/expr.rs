@@ -27,12 +27,33 @@ pub struct Expr {
     pub list: Option<Vec<Expr>>,
 }
 
+impl Expr {
+    fn type_str(&self) -> String {
+        match self.kind {
+            ExprType::Literal => {
+                let mut val = self.token.val();
+                if val == "" {
+                    val = format!("{:?}", self.token.kind);
+                }
+                return val;
+            }
+            ExprType::Unary | ExprType::Binary | ExprType::Logical => {
+                format!("{}", self.token.kind)
+            }
+            ExprType::Variable => self.token.val(),
+            _ => format!("{:?}", self.kind),
+        }
+    }
+}
+
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match (&self.left, &self.right, &self.list) {
-            (None, None, None) => write!(f, "{:?}({})", self.kind, self.token.val()),
-            (Some(left), None, None) => write!(f, "{:?}({})", self.kind, left),
-            (Some(left), Some(right), None) => write!(f, "{:?}({}, {})", self.kind, left, right),
+            (None, None, None) => write!(f, "{}", self.type_str()),
+            (Some(left), None, None) => write!(f, "{}({})", self.type_str(), left),
+            (Some(left), Some(right), None) => {
+                write!(f, "{}({}, {})", self.type_str(), left, right)
+            }
             (Some(left), None, Some(list)) => {
                 let list_str = list
                     .iter()
@@ -40,9 +61,9 @@ impl fmt::Display for Expr {
                     .collect::<String>()
                     .trim_end_matches(",")
                     .to_string();
-                write!(f, "{:?}({}, [{}])", self.kind, left, list_str)
+                write!(f, "{}({}, [{}])", self.type_str(), left, list_str)
             }
-            _ => write!(f, "{:?}()", self.kind),
+            _ => write!(f, "{}", self.type_str()),
         }
     }
 }
@@ -83,7 +104,15 @@ pub fn unary(t: Token, opr: Expr) -> Expr {
 
 pub fn binary(t: Token, left: Expr, right: Expr) -> Expr {
     let kind = match t.kind {
-        Kind::Slash | Kind::Star | Kind::Minus | Kind::Plus => ExprType::Binary,
+        Kind::Slash
+        | Kind::Star
+        | Kind::DoubleEqual
+        | Kind::Greater
+        | Kind::GreaterEqual
+        | Kind::Less
+        | Kind::LessEqual
+        | Kind::Minus
+        | Kind::Plus => ExprType::Binary,
         Kind::Dot => ExprType::Get,
         Kind::Equal => match right.kind {
             ExprType::Variable | ExprType::Literal => ExprType::Assign,
@@ -136,9 +165,9 @@ pub fn to_string(list: &Vec<Stmt>) -> String {
 impl fmt::Display for Stmt {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Stmt::Expr(expr) => write!(f, "Expr({})", expr),
-            Stmt::Var(t, None) => write!(f, "Var({})", t),
-            Stmt::Var(t, Some(expr)) => write!(f, "Var({},{})", t, expr),
+            Stmt::Expr(expr) => write!(f, "{}", expr),
+            Stmt::Var(t, None) => write!(f, "Var({})", t.val()),
+            Stmt::Var(t, Some(expr)) => write!(f, "Var({},{})", t.val(), expr),
             Stmt::If(expr, stmts) => write!(f, "If({},{})", expr, stmts),
             Stmt::For(list, stmts) => write!(f, "For([{}],{})", to_string(list), stmts),
             Stmt::Block(list) => write!(f, "Block({})", to_string(list)),
@@ -146,14 +175,14 @@ impl fmt::Display for Stmt {
             Stmt::Fun(t, tokens, stmts) => {
                 let params = tokens
                     .iter()
-                    .map(|x| x.to_string() + ",")
+                    .map(|x| x.val() + ",")
                     .collect::<String>()
                     .trim_end_matches(",")
                     .to_string();
 
-                write!(f, "Func({},{},[{}])", t, params, to_string(stmts))
+                write!(f, "Func({},<{}>,[{}])", t.val(), params, to_string(stmts))
             }
-            Stmt::Class(t, stmts) => write!(f, "Class({},[{}])", t, to_string(stmts)),
+            Stmt::Class(t, stmts) => write!(f, "Class({},[{}])", t.val(), to_string(stmts)),
         }
     }
 }

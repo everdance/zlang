@@ -123,10 +123,10 @@ impl ParseState<'_> {
                 continue;
             }
 
-            if let Some(param) = self.next() {
-                params.push(param.clone());
+            if self.matches(Identifier("".to_string())) {
+                params.push(self.prev().unwrap().clone());
             } else {
-                return Err("unexpected end of paramater definition".to_string());
+                return Err("unexpected token paramater definition".to_string());
             }
         }
 
@@ -220,10 +220,9 @@ impl ParseState<'_> {
             return Err("unexpected for expression conditions".to_string());
         }
 
-        if let Ok(stmt) = self.exprstmt() {
-            Ok(Stmt::For(exprs, Box::new(stmt)))
-        } else {
-            Err("expect statement".to_string())
+        match self.block_or_expr() {
+            Ok(stmt) => Ok(Stmt::For(exprs, Box::new(stmt))),
+            Err(msg) => Err(format!("for block:{}", msg)),
         }
     }
 
@@ -238,15 +237,21 @@ impl ParseState<'_> {
                     return Err("expect right paren".to_string());
                 }
 
-                // block or single expression
-                if let Ok(stmt) = self.exprstmt() {
-                    Ok((cond, stmt))
-                } else {
-                    Err("expect statement".to_string())
+                match self.block_or_expr() {
+                    Ok(stmt) => Ok((cond, stmt)),
+                    Err(msg) => Err(format!("if while block:{}", msg)),
                 }
             }
             Err(msg) => Err(msg),
             _ => Err("unreachable branch".to_string()),
+        }
+    }
+
+    fn block_or_expr(&mut self) -> Result<Stmt, String> {
+        if self.matches(Kind::LeftBrace) {
+            return self.blockstmt();
+        } else {
+            return self.exprstmt();
         }
     }
 
@@ -287,12 +292,12 @@ impl ParseState<'_> {
     //           super, this, identifer, grouping
     //           number, string, bool, nil, etc
     fn expr(&mut self) -> Result<Expr, String> {
-        match self.or() {
+        let res = match self.or() {
             Ok(left) => {
                 if self.matches(Kind::Equal) {
                     let eq = self.prev().unwrap().clone();
                     match self.expr() {
-                        Ok(val) => match val.kind {
+                        Ok(val) => match left.kind {
                             ExprType::Variable | ExprType::Literal => {
                                 Ok(expr::binary(eq, left, val))
                             } // assign
@@ -306,7 +311,15 @@ impl ParseState<'_> {
                 }
             }
             Err(e) => Err(e),
-        }
+        };
+
+        // consume any appended semicolon after expression
+        match res {
+            Ok(_) => self.matches(Semicolon),
+            _ => false,
+        };
+
+        res
     }
 
     fn or(&mut self) -> Result<Expr, String> {
@@ -594,9 +607,46 @@ mod tests {
         let s = "var x = 1;// var definition";
         match Parser::parse(s) {
             Ok(stmts) => {
-                assert_eq!(to_string(&stmts), "Var(Identifier(\"x\"),Literal(1))")
+                assert_eq!(to_string(&stmts), "Var(x,1)")
             }
             Err(msg) => assert!(false, "parse var err:{}", msg),
+        }
+    }
+
+    #[test]
+    fn if_def() {
+        let s = "if (x == 1) y = 2;";
+        match Parser::parse(s) {
+            Ok(stmts) => {
+                assert_eq!(to_string(&stmts), "If(DoubleEqual(x, 1),Assign(y, 2))")
+            }
+            Err(msg) => assert!(false, "parse if err:{}", msg),
+        }
+    }
+
+    #[test]
+    fn while_def() {
+        let s = "while (true) { a = 1; x = y * 2}";
+        match Parser::parse(s) {
+            Ok(stmts) => {
+                assert_eq!(
+                    to_string(&stmts),
+                    "While(True,Block(Assign(a, 1),Set(x, Star(y, 2))))"
+                )
+            }
+            Err(msg) => assert!(false, "parse while err:{}", msg),
+        }
+    }
+
+    #[test]
+    fn for_def() {
+        let s = "for (var x = 0; x <= 10; x = x + 1) { y = y - 2;}";
+        match Parser::parse(s) {
+            Ok(stmts) => {
+                assert_eq!(to_string(&stmts),
+                           "For([Var(x,0),LessEqual(x, 10),Set(x, Plus(x, 1))],Block(Set(y, Minus(y, 2))))")
+            }
+            Err(msg) => assert!(false, "parse while err:{}", msg),
         }
     }
 
@@ -605,7 +655,7 @@ mod tests {
         let s = "fun multiply(x,y) { x*y }";
         match Parser::parse(s) {
             Ok(stmts) => {
-                assert_eq!(to_string(&stmts), "Var(Identifier(\"x\"),Literal(1))")
+                assert_eq!(to_string(&stmts), "Func(multiply,<x,y>,[Star(x, y)])")
             }
             Err(msg) => assert!(false, "parse fun err:{}", msg),
         }
