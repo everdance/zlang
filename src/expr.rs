@@ -72,6 +72,7 @@ pub fn single(t: Token) -> Expr {
     let kind = match t.kind {
         Kind::Var => ExprType::Variable,
         Kind::This => ExprType::This,
+        Kind::Super => ExprType::Super,
         _ => ExprType::Literal,
     };
 
@@ -166,6 +167,7 @@ impl fmt::Display for Stmt {
         match self {
             Stmt::Expr(expr) => write!(f, "{}", expr),
             Stmt::Var(t, None) => write!(f, "Var({})", t.val()),
+            Stmt::Return(_, expr) => write!(f, "Return({})", expr),
             Stmt::Var(t, Some(expr)) => write!(f, "Var({},{})", t.val(), expr),
             Stmt::If(expr, stmts, None) => write!(f, "If({},{})", expr, stmts),
             Stmt::If(expr, stmts, Some(elsestmt)) => {

@@ -696,12 +696,12 @@ mod tests {
 
     #[test]
     fn class_def() {
-        let s = "class Test { var x = 0\nfun set(x) { this.x = x } }";
+        let s = "class Test { var x = 0\nfun set(x) { this.x = super.x; return this } }";
         match Parser::parse(s) {
             Ok(stmts) => {
                 assert_eq!(
                     to_string(&stmts),
-                    "Class(Test,[Var(x,0),Func(set,<x>,[Assign(Get(This, x), x)])])"
+                    "Class(Test,[Var(x,0),Func(set,<x>,[Set(Get(This, x), Get(Super, x)),Return(This)])])"
                 )
             }
             Err(msg) => assert!(false, "parse class err:{}", msg),
