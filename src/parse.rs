@@ -173,6 +173,8 @@ impl ParseState<'_> {
             return self.whilestmt();
         } else if self.matches(Kind::LeftBrace) {
             return self.blockstmt();
+        } else if self.matches(Kind::Return) {
+            return self.retstmt();
         } else {
             return self.exprstmt();
         }
@@ -304,6 +306,14 @@ impl ParseState<'_> {
         }
 
         Ok(Stmt::Block(stmts))
+    }
+
+    fn retstmt(&mut self) -> Result<Stmt, String> {
+        let token = self.prev().unwrap().clone();
+        match self.expr() {
+            Ok(expr) => Ok(Stmt::Return(token, expr)),
+            Err(msg) => Err(msg),
+        }
     }
 
     fn exprstmt(&mut self) -> Result<Stmt, String> {
@@ -548,7 +558,7 @@ impl ParseState<'_> {
         self.next();
 
         match token.kind {
-            Identifier(_) | StrLiteral(_) | NumLiteral(_) | True | False | Nil => {
+            Identifier(_) | StrLiteral(_) | NumLiteral(_) | This | Super | True | False | Nil => {
                 Ok(expr::single(token))
             }
 
@@ -562,19 +572,6 @@ impl ParseState<'_> {
                 }
                 Err(msg) => Err(msg),
             },
-
-            This => Ok(expr::single(token)),
-
-            Super => {
-                if self.matches(Dot) {
-                    match self.expr() {
-                        Ok(method) => Ok(expr::unary(token, method)),
-                        Err(msg) => Err(msg),
-                    }
-                } else {
-                    Err("missing dot after super".to_string())
-                }
-            }
 
             x => Err(format!("unexpected primary token:{}", x).to_string()),
         }

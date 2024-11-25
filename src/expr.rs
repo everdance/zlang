@@ -88,7 +88,6 @@ pub fn unary(t: Token, opr: Expr) -> Expr {
     let kind = match t.kind {
         Kind::Minus | Kind::Bang => ExprType::Unary,
         Kind::LeftParen => ExprType::Grouping,
-        Kind::Super => ExprType::Super,
         _ => panic!("unexpected token type: {:?}", t),
     };
 
@@ -145,7 +144,7 @@ pub fn list(t: Token, left: Expr, list: Vec<Expr>) -> Expr {
 pub enum Stmt {
     Expr(Expr),
     Var(Token, Option<Expr>),
-    //Return(Token, Expr),
+    Return(Token, Expr),
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     For(Vec<Stmt>, Box<Stmt>),
     Block(Vec<Stmt>),
