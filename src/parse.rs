@@ -166,17 +166,11 @@ impl ParseState<'_> {
     //          if, for, while, block, return
     fn stmt(&mut self) -> Result<Stmt, String> {
         if self.matches(Kind::If) {
-            match self.ifwhilestmt() {
-                Ok((epr, stmt)) => Ok(Stmt::If(epr, Box::new(stmt))),
-                Err(msg) => Err(msg),
-            }
+            return self.ifelsestmt();
         } else if self.matches(Kind::For) {
             return self.forstmt();
         } else if self.matches(Kind::While) {
-            match self.ifwhilestmt() {
-                Ok((epr, stmt)) => Ok(Stmt::While(epr, Box::new(stmt))),
-                Err(msg) => Err(msg),
-            }
+            return self.whilestmt();
         } else if self.matches(Kind::LeftBrace) {
             return self.blockstmt();
         } else {
@@ -226,7 +220,47 @@ impl ParseState<'_> {
         }
     }
 
-    fn ifwhilestmt(&mut self) -> Result<(Expr, Stmt), String> {
+    fn ifelsestmt(&mut self) -> Result<Stmt, String> {
+        if !self.matches(LeftParen) {
+            return Err("expect left paren".to_string());
+        }
+
+        let cond: Expr;
+        let ifstmt: Stmt;
+        match self.exprstmt() {
+            Ok(Stmt::Expr(c)) => {
+                cond = c;
+                if !self.matches(RightParen) {
+                    return Err("expect right paren".to_string());
+                }
+
+                match self.block_or_expr() {
+                    Ok(stmt) => ifstmt = stmt,
+                    Err(msg) => return Err(format!("if block:{}", msg)),
+                }
+            }
+            Err(msg) => return Err(msg),
+            _ => return Err("unreachable branch".to_string()),
+        };
+
+        if !self.matches(Else) {
+            return Ok(Stmt::If(cond, Box::new(ifstmt), None));
+        }
+
+        if self.matches(If) {
+            match self.ifelsestmt() {
+                Ok(elsestmt) => Ok(Stmt::If(cond, Box::new(ifstmt), Some(Box::new(elsestmt)))),
+                Err(msg) => Err(msg),
+            }
+        } else {
+            match self.block_or_expr() {
+                Ok(elsestmt) => Ok(Stmt::If(cond, Box::new(ifstmt), Some(Box::new(elsestmt)))),
+                Err(msg) => Err(format!("else block:{}", msg)),
+            }
+        }
+    }
+
+    fn whilestmt(&mut self) -> Result<Stmt, String> {
         if !self.matches(LeftParen) {
             return Err("expect left paren".to_string());
         }
@@ -238,7 +272,7 @@ impl ParseState<'_> {
                 }
 
                 match self.block_or_expr() {
-                    Ok(stmt) => Ok((cond, stmt)),
+                    Ok(stmt) => Ok(Stmt::While(cond, Box::new(stmt))),
                     Err(msg) => Err(format!("if while block:{}", msg)),
                 }
             }
@@ -610,6 +644,19 @@ mod tests {
                 assert_eq!(to_string(&stmts), "If(DoubleEqual(x, 1),Assign(y, 2))")
             }
             Err(msg) => assert!(false, "parse if err:{}", msg),
+        }
+    }
+
+    #[test]
+    fn if_else_def() {
+        let s = "if (x != y) { y = 2 } else if (x > 3) { y = 3} else {y =5};";
+        match Parser::parse(s) {
+            Ok(stmts) => {
+                assert_eq!(
+                    to_string(&stmts),
+                    "If(BangEqual(x, y),Block(Assign(y, 2)),If(Greater(x, 3),Block(Assign(y, 3)),Block(Assign(y, 5))))")
+            }
+            Err(msg) => assert!(false, "parse if else err:{}", msg),
         }
     }
 

@@ -146,7 +146,7 @@ pub enum Stmt {
     Expr(Expr),
     Var(Token, Option<Expr>),
     //Return(Token, Expr),
-    If(Expr, Box<Stmt>),
+    If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     For(Vec<Stmt>, Box<Stmt>),
     Block(Vec<Stmt>),
     While(Expr, Box<Stmt>),
@@ -168,7 +168,10 @@ impl fmt::Display for Stmt {
             Stmt::Expr(expr) => write!(f, "{}", expr),
             Stmt::Var(t, None) => write!(f, "Var({})", t.val()),
             Stmt::Var(t, Some(expr)) => write!(f, "Var({},{})", t.val(), expr),
-            Stmt::If(expr, stmts) => write!(f, "If({},{})", expr, stmts),
+            Stmt::If(expr, stmts, None) => write!(f, "If({},{})", expr, stmts),
+            Stmt::If(expr, stmts, Some(elsestmt)) => {
+                write!(f, "If({},{},{})", expr, stmts, elsestmt)
+            }
             Stmt::For(list, stmts) => write!(f, "For([{}],{})", to_string(list), stmts),
             Stmt::Block(list) => write!(f, "Block({})", to_string(list)),
             Stmt::While(expr, stmts) => write!(f, "While({},{})", expr, stmts),
