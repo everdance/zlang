@@ -1,8 +1,8 @@
 use std::fmt;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Token {
-    pub kind: TokenKind,
+    pub kind: Kind,
     pub line: usize,
     pub pos: usize,
 }
@@ -13,8 +13,18 @@ impl fmt::Display for Token {
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub enum TokenKind {
+impl Token {
+    pub fn val(&self) -> String {
+        match self.kind.clone() {
+            Kind::Identifier(x) | Kind::StrLiteral(x) => x,
+            Kind::NumLiteral(y) => y.to_string(),
+            _ => "".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum Kind {
     LeftParen,
     RightParen,
     LeftBrace,
@@ -59,7 +69,18 @@ pub enum TokenKind {
     Comment,
 }
 
-impl fmt::Display for TokenKind {
+impl Kind {
+    pub fn type_eq(&self, other: &Kind) -> bool {
+        match (self, other) {
+            (Kind::Identifier(_), Kind::Identifier(_)) => true,
+            (Kind::StrLiteral(_), Kind::StrLiteral(_)) => true,
+            (Kind::NumLiteral(_), Kind::NumLiteral(_)) => true,
+            _ => self == other,
+        }
+    }
+}
+
+impl fmt::Display for Kind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
     }
