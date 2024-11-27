@@ -63,14 +63,20 @@ impl ParseState<'_> {
     fn class(&mut self) -> Result<Stmt, String> {
         let token: Token;
 
-        if self.matches(Identifier("".to_string())) {
+        if self.matches_identifier() {
             token = self.prev().unwrap().clone();
         } else {
-            return Err("expect class identifier".to_string());
+            return Err(format!(
+                "expect identifier, got {:?}",
+                self.cur().unwrap().clone()
+            ));
         }
 
         if !self.matches(LeftBrace) {
-            return Err("expect left brace for class definition".to_string());
+            return Err(format!(
+                "expect left brace, got {:?}",
+                self.cur().unwrap().clone()
+            ));
         }
 
         let mut stmts = vec![];
@@ -86,8 +92,10 @@ impl ParseState<'_> {
             } else if self.matches(Kind::Fun) {
                 res = self.func();
             } else {
-                let token = self.cur().unwrap();
-                return Err(format!("unexpected token {} in class definition", token).to_string());
+                return Err(format!(
+                    "unexpected {:?} in class definition",
+                    self.cur().unwrap()
+                ));
             }
 
             if let Ok(stmt) = res {
@@ -103,14 +111,20 @@ impl ParseState<'_> {
     fn func(&mut self) -> Result<Stmt, String> {
         let token: Token;
 
-        if self.matches(Identifier("".to_string())) {
+        if self.matches_identifier() {
             token = self.prev().unwrap().clone();
         } else {
-            return Err("expect fun identifier".to_string());
+            return Err(format!(
+                "expect function identifier, got {:?}",
+                self.cur().unwrap().clone()
+            ));
         }
 
         if !self.matches(LeftParen) {
-            return Err("expect left paren for argument list".to_string());
+            return Err(format!(
+                "expect left paren, got {:?}",
+                self.cur().unwrap().clone()
+            ));
         }
 
         let mut params = vec![];
@@ -123,15 +137,21 @@ impl ParseState<'_> {
                 continue;
             }
 
-            if self.matches(Identifier("".to_string())) {
+            if self.matches_identifier() {
                 params.push(self.prev().unwrap().clone());
             } else {
-                return Err("unexpected token paramater definition".to_string());
+                return Err(format!(
+                    "unexpected {:?} for function parameter",
+                    self.cur().unwrap().clone()
+                ));
             }
         }
 
         if !self.matches(LeftBrace) {
-            return Err("expect left brace for function body".to_string());
+            return Err(format!(
+                "expect left brace, got {:?}",
+                self.cur().unwrap().clone()
+            ));
         }
 
         let mut stmts = vec![];
@@ -156,7 +176,7 @@ impl ParseState<'_> {
                     epx.left.unwrap().token,
                     Some(*epx.right.unwrap()),
                 )),
-                x => Err(format!("unexpected expression after var: {:?}", x).to_string()),
+                _ => Err(format!("unexpected expression after var: {:?}", epx)),
             },
             Err(msg) => Err(msg),
         }
@@ -182,7 +202,10 @@ impl ParseState<'_> {
 
     fn forstmt(&mut self) -> Result<Stmt, String> {
         if !self.matches(LeftParen) {
-            return Err("expect left paren for if condition".to_string());
+            return Err(format!(
+                "expect left paren, got {:?}",
+                self.cur().unwrap().clone()
+            ));
         }
 
         let mut exprs = vec![];
@@ -197,7 +220,10 @@ impl ParseState<'_> {
 
             if self.matches(Var) {
                 if exprs.len() != 0 {
-                    return Err("unexpected var definition in for".to_string());
+                    return Err(format!(
+                        "repeated var definition: {:?}",
+                        self.prev().unwrap().clone()
+                    ));
                 }
 
                 match self.var() {
@@ -213,18 +239,24 @@ impl ParseState<'_> {
         }
 
         if exprs.len() != 1 && exprs.len() != 3 {
-            return Err("unexpected for expression conditions".to_string());
+            return Err(format!(
+                "unexpected <for> expression length:{}",
+                exprs.len()
+            ));
         }
 
         match self.block_or_expr() {
             Ok(stmt) => Ok(Stmt::For(exprs, Box::new(stmt))),
-            Err(msg) => Err(format!("for block:{}", msg)),
+            Err(msg) => Err(msg),
         }
     }
 
     fn ifelsestmt(&mut self) -> Result<Stmt, String> {
         if !self.matches(LeftParen) {
-            return Err("expect left paren".to_string());
+            return Err(format!(
+                "expect left paren, got {:?}",
+                self.cur().unwrap().clone()
+            ));
         }
 
         let cond: Expr;
@@ -233,16 +265,19 @@ impl ParseState<'_> {
             Ok(Stmt::Expr(c)) => {
                 cond = c;
                 if !self.matches(RightParen) {
-                    return Err("expect right paren".to_string());
+                    return Err(format!(
+                        "expect right paren, got {:?}",
+                        self.cur().unwrap().clone()
+                    ));
                 }
 
                 match self.block_or_expr() {
                     Ok(stmt) => ifstmt = stmt,
-                    Err(msg) => return Err(format!("if block:{}", msg)),
+                    Err(msg) => return Err(msg),
                 }
             }
             Err(msg) => return Err(msg),
-            _ => return Err("unreachable branch".to_string()),
+            _ => return Err("unreachable".to_string()),
         };
 
         if !self.matches(Else) {
@@ -257,25 +292,31 @@ impl ParseState<'_> {
         } else {
             match self.block_or_expr() {
                 Ok(elsestmt) => Ok(Stmt::If(cond, Box::new(ifstmt), Some(Box::new(elsestmt)))),
-                Err(msg) => Err(format!("else block:{}", msg)),
+                Err(msg) => Err(msg),
             }
         }
     }
 
     fn whilestmt(&mut self) -> Result<Stmt, String> {
         if !self.matches(LeftParen) {
-            return Err("expect left paren".to_string());
+            return Err(format!(
+                "expect left paren, got {:?}",
+                self.cur().unwrap().clone()
+            ));
         }
 
         match self.exprstmt() {
             Ok(Stmt::Expr(cond)) => {
                 if !self.matches(RightParen) {
-                    return Err("expect right paren".to_string());
+                    return Err(format!(
+                        "expect right paren, got {:?}",
+                        self.cur().unwrap().clone()
+                    ));
                 }
 
                 match self.block_or_expr() {
                     Ok(stmt) => Ok(Stmt::While(cond, Box::new(stmt))),
-                    Err(msg) => Err(format!("if while block:{}", msg)),
+                    Err(msg) => Err(msg),
                 }
             }
             Err(msg) => Err(msg),
@@ -346,7 +387,7 @@ impl ParseState<'_> {
                                 Ok(expr::binary(eq, left, val))
                             } // assign
                             ExprType::Get => Ok(expr::binary(eq, left, val)), // set
-                            k => return Err(format!("invalid type: {:?}", k).to_string()),
+                            _ => return Err(format!("invalid left hand expression for {:?}", eq)),
                         },
                         Err(e) => return Err(e),
                     }
@@ -512,7 +553,10 @@ impl ParseState<'_> {
                     let right = expr::single(self.prev().unwrap().clone());
                     epx = expr::binary(dot, epx, right);
                 } else {
-                    return Err("Expect identifier after dot".to_string());
+                    return Err(format!(
+                        "expect identifier, got {:?}",
+                        self.cur().unwrap().clone()
+                    ));
                 }
             } else {
                 break;
@@ -530,9 +574,6 @@ impl ParseState<'_> {
         }
 
         loop {
-            if args.len() >= 255 {
-                return Err("can't have more than 255 parameters".to_string());
-            }
             match self.expr() {
                 Ok(param) => args.push(param),
                 Err(msg) => return Err(msg),
@@ -551,7 +592,10 @@ impl ParseState<'_> {
     fn primary(&mut self) -> Result<Expr, String> {
         let res = self.cur();
         if res == None {
-            return Err(format!("expect primary, cursor:{}", self.cursor).to_string());
+            return Err(format!(
+                "expect token after {:?}",
+                self.prev().unwrap().clone()
+            ));
         }
 
         let token = res.unwrap().clone();
@@ -567,13 +611,16 @@ impl ParseState<'_> {
                     if self.matches(RightParen) {
                         Ok(expr::unary(token, sub))
                     } else {
-                        Err("missing right paren after expression".to_string())
+                        return Err(format!(
+                            "expect right paren after {:?}",
+                            self.prev().unwrap().clone()
+                        ));
                     }
                 }
                 Err(msg) => Err(msg),
             },
 
-            x => Err(format!("unexpected primary token:{}", x).to_string()),
+            _ => Err(format!("unexpected primary token:{:?}", token)),
         }
     }
 
@@ -586,6 +633,10 @@ impl ParseState<'_> {
         }
 
         false
+    }
+
+    fn matches_identifier(&mut self) -> bool {
+        return self.matches(Identifier("".to_string()));
     }
 
     fn matches_any(&mut self, kinds: Vec<Kind>) -> bool {
@@ -621,6 +672,34 @@ impl ParseState<'_> {
 mod tests {
     use super::*;
     use expr::to_string;
+
+    #[test]
+    fn expr() {
+        let s = "(x = (y == 3/2 or 2 != 1))";
+        match Parser::parse(s) {
+            Ok(stmts) => {
+                assert_eq!(
+                    to_string(&stmts),
+                    "Grouping(Set(x, Grouping(Or(DoubleEqual(y, Slash(3, 2)), BangEqual(2, 1)))))"
+                )
+            }
+            Err(msg) => assert!(false, "parse expr err:{}", msg),
+        }
+    }
+
+    #[test]
+    fn expr_super() {
+        let s = "y == 3/2 or 2 != 1 and z > x or a != \"decode\"";
+        match Parser::parse(s) {
+            Ok(stmts) => {
+                assert_eq!(
+                    to_string(&stmts),
+                    "Or(Or(DoubleEqual(y, Slash(3, 2)), And(BangEqual(2, 1), Greater(z, x))), BangEqual(a, decode))"
+                )
+            }
+            Err(msg) => assert!(false, "parse expr err:{}", msg),
+        }
+    }
 
     #[test]
     fn var_def() {
@@ -709,8 +788,8 @@ mod tests {
     }
 
     #[test]
-    fn expr() {
-        let s = "(x = (y == 3/2 or 2 != 1))";
+    fn expr_err() {
+        let s = "(x = (y == 3/2 or 2 != ))";
         match Parser::parse(s) {
             Ok(stmts) => {
                 assert_eq!(
