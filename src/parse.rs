@@ -412,9 +412,24 @@ impl ParseState<'_> {
 
         let mut epx = res.unwrap();
         while self.matches(Or) {
+            if !epx.is_logic() {
+                return Err(format!(
+                    "expect logic expression on left operand, got {}",
+                    epx
+                ));
+            }
+
             let or = self.prev().unwrap().clone();
             match self.and() {
-                Ok(right) => epx = expr::binary(or, epx, right),
+                Ok(right) => {
+                    if !right.is_logic() {
+                        return Err(format!(
+                            "expect logic expression on right operand, got {}",
+                            right
+                        ));
+                    }
+                    epx = expr::binary(or, epx, right);
+                }
                 Err(msg) => return Err(msg),
             }
         }
@@ -430,9 +445,24 @@ impl ParseState<'_> {
 
         let mut epx = res.unwrap();
         while self.matches(And) {
+            if !epx.is_logic() {
+                return Err(format!(
+                    "expect logic expression on left operand, got {}",
+                    epx
+                ));
+            }
+
             let and = self.prev().unwrap().clone();
             match self.equal() {
-                Ok(right) => epx = expr::binary(and, epx, right),
+                Ok(right) => {
+                    if !right.is_logic() {
+                        return Err(format!(
+                            "expect logic expression on right operand, got {}",
+                            right
+                        ));
+                    }
+                    epx = expr::binary(and, epx, right);
+                }
                 Err(msg) => return Err(msg),
             }
         }
@@ -730,7 +760,10 @@ mod tests {
             Ok(_) => {
                 assert!(false, "expect logic error")
             }
-            Err(msg) => assert_eq!(msg, ""),
+            Err(msg) => assert_eq!(
+                msg,
+                "expect logic expression on right operand, got Grouping(Assign(x, 1))"
+            ),
         }
     }
 

@@ -1,4 +1,5 @@
 use core::fmt;
+use std::ops::Sub;
 
 use crate::token::{Kind, Token};
 
@@ -27,6 +28,14 @@ pub struct Expr {
 }
 
 impl Expr {
+    pub fn is_logic(&self) -> bool {
+        match self.kind {
+            ExprType::Logical => true,
+            ExprType::Literal => self.token.kind == Kind::True || self.token.kind == Kind::False,
+            _ => false,
+        }
+    }
+
     fn type_str(&self) -> String {
         match self.kind {
             ExprType::Literal | ExprType::Identifier => {
@@ -101,19 +110,17 @@ pub fn unary(t: Token, opr: Expr) -> Expr {
 
 pub fn binary(t: Token, left: Expr, right: Expr) -> Expr {
     let kind = match t.kind {
-        Kind::Slash
-        | Kind::Star
-        | Kind::DoubleEqual
+        Kind::Slash | Kind::Star | Kind::Minus | Kind::Plus => ExprType::Binary,
+        Kind::Dot => ExprType::Get,
+        Kind::Equal => ExprType::Assign,
+        Kind::DoubleEqual
         | Kind::BangEqual
         | Kind::Greater
         | Kind::GreaterEqual
         | Kind::Less
         | Kind::LessEqual
-        | Kind::Minus
-        | Kind::Plus => ExprType::Binary,
-        Kind::Dot => ExprType::Get,
-        Kind::Equal => ExprType::Assign,
-        Kind::And | Kind::Or => ExprType::Logical,
+        | Kind::And
+        | Kind::Or => ExprType::Logical,
         _ => panic!("unexpected token type: {:?}", t),
     };
 
