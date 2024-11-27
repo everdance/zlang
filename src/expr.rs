@@ -1,7 +1,5 @@
-use core::fmt;
-use std::ops::Sub;
-
 use crate::token::{Kind, Token};
+use core::fmt;
 
 #[derive(Debug, PartialEq)]
 pub enum ExprType {
