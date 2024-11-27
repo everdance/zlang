@@ -171,7 +171,7 @@ impl ParseState<'_> {
     fn var(&mut self) -> Result<Stmt, String> {
         match self.expr() {
             Ok(epx) => match epx.kind {
-                ExprType::Variable => Ok(Stmt::Var(epx.token, None)),
+                ExprType::Identifier => Ok(Stmt::Var(epx.token, None)),
                 ExprType::Assign => Ok(Stmt::Var(
                     epx.left.unwrap().token,
                     Some(*epx.right.unwrap()),
@@ -383,11 +383,8 @@ impl ParseState<'_> {
                     let eq = self.prev().unwrap().clone();
                     match self.expr() {
                         Ok(val) => match left.kind {
-                            ExprType::Variable | ExprType::Literal => {
-                                Ok(expr::binary(eq, left, val))
-                            } // assign
-                            ExprType::Get => Ok(expr::binary(eq, left, val)), // set
-                            _ => return Err(format!("invalid left hand expression for {:?}", eq)),
+                            ExprType::Identifier | ExprType::Get => Ok(expr::binary(eq, left, val)),
+                            _ => return Err(format!("invalid left hand value {}", left)),
                         },
                         Err(e) => return Err(e),
                     }
@@ -549,7 +546,7 @@ impl ParseState<'_> {
                 };
             } else if self.matches(Dot) {
                 let dot = self.prev().unwrap().clone();
-                if self.matches(Identifier("".to_string())) {
+                if self.matches_identifier() {
                     let right = expr::single(self.prev().unwrap().clone());
                     epx = expr::binary(dot, epx, right);
                 } else {
@@ -620,7 +617,7 @@ impl ParseState<'_> {
                 Err(msg) => Err(msg),
             },
 
-            _ => Err(format!("unexpected primary token:{:?}", token)),
+            _ => Err(format!("unexpected primary:{:?}", token)),
         }
     }
 
@@ -680,7 +677,7 @@ mod tests {
             Ok(stmts) => {
                 assert_eq!(
                     to_string(&stmts),
-                    "Grouping(Set(x, Grouping(Or(DoubleEqual(y, Slash(3, 2)), BangEqual(2, 1)))))"
+                    "Grouping(Assign(x, Grouping(Or(DoubleEqual(y, Slash(3, 2)), BangEqual(2, 1)))))"
                 )
             }
             Err(msg) => assert!(false, "parse expr err:{}", msg),
@@ -698,6 +695,42 @@ mod tests {
                 )
             }
             Err(msg) => assert!(false, "parse expr err:{}", msg),
+        }
+    }
+
+    #[test]
+    fn lhv_err() {
+        let s = "2 = 1";
+        match Parser::parse(s) {
+            Ok(_) => {
+                assert!(false, "expect left hand value error")
+            }
+            Err(msg) => assert_eq!(msg, "invalid left hand value 2"),
+        }
+    }
+
+    #[test]
+    fn expr_err() {
+        let s = "x = (y == 3/2 or 2 != )";
+        match Parser::parse(s) {
+            Ok(_) => {
+                assert!(false, "expect expression error")
+            }
+            Err(msg) => assert_eq!(
+                msg,
+                "unexpected primary:Token { kind: RightParen, line: 0, pos: 22 }"
+            ),
+        }
+    }
+
+    #[test]
+    fn logic_err() {
+        let s = "y == 0 or (x = 1)";
+        match Parser::parse(s) {
+            Ok(_) => {
+                assert!(false, "expect logic error")
+            }
+            Err(msg) => assert_eq!(msg, ""),
         }
     }
 
@@ -743,7 +776,7 @@ mod tests {
             Ok(stmts) => {
                 assert_eq!(
                     to_string(&stmts),
-                    "While(True,Block(Assign(a, 1),Set(x, Star(y, 2))))"
+                    "While(True,Block(Assign(a, 1),Assign(x, Star(y, 2))))"
                 )
             }
             Err(msg) => assert!(false, "parse while err:{}", msg),
@@ -756,7 +789,7 @@ mod tests {
         match Parser::parse(s) {
             Ok(stmts) => {
                 assert_eq!(to_string(&stmts),
-                           "For([Var(x,0),LessEqual(x, 10),Set(x, Plus(x, 1))],Block(Set(y, Minus(y, 2))))")
+                           "For([Var(x,0),LessEqual(x, 10),Assign(x, Plus(x, 1))],Block(Assign(y, Minus(y, 2))))")
             }
             Err(msg) => assert!(false, "parse while err:{}", msg),
         }
@@ -780,24 +813,10 @@ mod tests {
             Ok(stmts) => {
                 assert_eq!(
                     to_string(&stmts),
-                    "Class(Test,[Var(x,0),Func(set,<x>,[Set(Get(This, x), Get(Super, x)),Return(This)])])"
+                    "Class(Test,[Var(x,0),Func(set,<x>,[Assign(Get(This, x), Get(Super, x)),Return(This)])])"
                 )
             }
             Err(msg) => assert!(false, "parse class err:{}", msg),
-        }
-    }
-
-    #[test]
-    fn expr_err() {
-        let s = "(x = (y == 3/2 or 2 != ))";
-        match Parser::parse(s) {
-            Ok(stmts) => {
-                assert_eq!(
-                    to_string(&stmts),
-                    "Grouping(Set(x, Grouping(Or(DoubleEqual(y, Slash(3, 2)), BangEqual(2, 1)))))"
-                )
-            }
-            Err(msg) => assert!(false, "parse expr err:{}", msg),
         }
     }
 }

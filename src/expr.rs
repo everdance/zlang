@@ -5,15 +5,14 @@ use crate::token::{Kind, Token};
 #[derive(Debug, PartialEq)]
 pub enum ExprType {
     Literal,
+    Identifier,
     Binary,
     Unary,
-    Variable,
     Logical,
     Grouping,
     Call,
     Assign,
     Get,
-    Set,
     This,
     Super,
 }
@@ -30,7 +29,7 @@ pub struct Expr {
 impl Expr {
     fn type_str(&self) -> String {
         match self.kind {
-            ExprType::Literal => {
+            ExprType::Literal | ExprType::Identifier => {
                 let mut val = self.token.val();
                 if val == "" {
                     val = format!("{:?}", self.token.kind);
@@ -40,7 +39,6 @@ impl Expr {
             ExprType::Unary | ExprType::Binary | ExprType::Logical => {
                 format!("{}", self.token.kind)
             }
-            ExprType::Variable => self.token.val(),
             _ => format!("{:?}", self.kind),
         }
     }
@@ -70,9 +68,9 @@ impl fmt::Display for Expr {
 
 pub fn single(t: Token) -> Expr {
     let kind = match t.kind {
-        Kind::Var => ExprType::Variable,
         Kind::This => ExprType::This,
         Kind::Super => ExprType::Super,
+        Kind::Identifier(_) => ExprType::Identifier,
         _ => ExprType::Literal,
     };
 
@@ -114,10 +112,7 @@ pub fn binary(t: Token, left: Expr, right: Expr) -> Expr {
         | Kind::Minus
         | Kind::Plus => ExprType::Binary,
         Kind::Dot => ExprType::Get,
-        Kind::Equal => match right.kind {
-            ExprType::Variable | ExprType::Literal => ExprType::Assign,
-            _ => ExprType::Set,
-        },
+        Kind::Equal => ExprType::Assign,
         Kind::And | Kind::Or => ExprType::Logical,
         _ => panic!("unexpected token type: {:?}", t),
     };
