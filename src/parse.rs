@@ -176,7 +176,7 @@ impl ParseState<'_> {
                     epx.left.unwrap().token,
                     Some(*epx.right.unwrap()),
                 )),
-                _ => Err(format!("unexpected expression after var: {:?}", epx)),
+                _ => Err(format!("unexpected expression after var: {}", epx)),
             },
             Err(msg) => Err(msg),
         }
@@ -195,6 +195,8 @@ impl ParseState<'_> {
             return self.blockstmt();
         } else if self.matches(Kind::Return) {
             return self.retstmt();
+        } else if self.matches(Kind::Var) {
+            return self.var();
         } else {
             return self.exprstmt();
         }
@@ -245,6 +247,21 @@ impl ParseState<'_> {
             ));
         }
 
+        let cond_stmt = if exprs.len() == 1 {
+            &exprs[0]
+        } else {
+            &exprs[1]
+        };
+
+        match cond_stmt {
+            Stmt::Expr(cond) => {
+                if !cond.is_logic() {
+                    return Err(format!("expect logic expression, got {}", cond));
+                }
+            }
+            _ => unreachable!(),
+        }
+
         match self.block_or_expr() {
             Ok(stmt) => Ok(Stmt::For(exprs, Box::new(stmt))),
             Err(msg) => Err(msg),
@@ -264,6 +281,10 @@ impl ParseState<'_> {
         match self.exprstmt() {
             Ok(Stmt::Expr(c)) => {
                 cond = c;
+                if !cond.is_logic() {
+                    return Err(format!("expect logic expression, got {}", cond));
+                }
+
                 if !self.matches(RightParen) {
                     return Err(format!(
                         "expect right paren, got {:?}",
@@ -307,6 +328,10 @@ impl ParseState<'_> {
 
         match self.exprstmt() {
             Ok(Stmt::Expr(cond)) => {
+                if !cond.is_logic() {
+                    return Err(format!("expect logic expression, got {}", cond));
+                }
+
                 if !self.matches(RightParen) {
                     return Err(format!(
                         "expect right paren, got {:?}",
@@ -338,6 +363,10 @@ impl ParseState<'_> {
         loop {
             if self.matches(RightBrace) {
                 break;
+            }
+
+            if self.matches(Semicolon) {
+                continue;
             }
 
             match self.stmt() {
@@ -769,12 +798,34 @@ mod tests {
 
     #[test]
     fn var_def() {
-        let s = "var x = 1;// var definition";
+        let s = "var x;";
+        match Parser::parse(s) {
+            Ok(stmts) => {
+                assert_eq!(to_string(&stmts), "Var(x)")
+            }
+            Err(msg) => assert!(false, "parse var err:{}", msg),
+        }
+    }
+
+    #[test]
+    fn var_def_with_assign() {
+        let s = "var x = 1;";
         match Parser::parse(s) {
             Ok(stmts) => {
                 assert_eq!(to_string(&stmts), "Var(x,1)")
             }
             Err(msg) => assert!(false, "parse var err:{}", msg),
+        }
+    }
+
+    #[test]
+    fn var_err() {
+        let s = "var 1;";
+        match Parser::parse(s) {
+            Ok(_) => {
+                assert!(false, "should error on var def")
+            }
+            Err(msg) => assert_eq!(msg, "unexpected expression after var: 1"),
         }
     }
 
@@ -803,6 +854,17 @@ mod tests {
     }
 
     #[test]
+    fn if_err() {
+        let s = "if (x = 1) y = 2;";
+        match Parser::parse(s) {
+            Ok(_) => {
+                assert!(false, "should err on logic condition")
+            }
+            Err(msg) => assert_eq!(msg, "expect logic expression, got Assign(x, 1)"),
+        }
+    }
+
+    #[test]
     fn while_def() {
         let s = "while (true) { a = 1; x = y * 2}";
         match Parser::parse(s) {
@@ -810,6 +872,20 @@ mod tests {
                 assert_eq!(
                     to_string(&stmts),
                     "While(True,Block(Assign(a, 1),Assign(x, Star(y, 2))))"
+                )
+            }
+            Err(msg) => assert!(false, "parse while err:{}", msg),
+        }
+    }
+
+    #[test]
+    fn block_def() {
+        let s = "{ var a = 1; if (x == 3) x = y * 2; return x;}";
+        match Parser::parse(s) {
+            Ok(stmts) => {
+                assert_eq!(
+                    to_string(&stmts),
+                    "Block(Var(a,1),If(DoubleEqual(x, 3),Assign(x, Star(y, 2))),Return(x))"
                 )
             }
             Err(msg) => assert!(false, "parse while err:{}", msg),
