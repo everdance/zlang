@@ -1,8 +1,9 @@
+mod env;
+mod eval;
 mod expr;
 mod parse;
 mod scan;
 mod token;
-
 use parse::Parser;
 
 fn main() {
