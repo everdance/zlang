@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
 use crate::expr::Stmt;
 
@@ -7,12 +7,13 @@ pub struct Fun {
     body: Vec<Stmt>,
 }
 
+#[derive(Clone)]
 pub enum Value {
     Nil,
     Str(String),
     Num(f64),
     Bool(bool),
-    Fun(Box<Fun>),
+    Fun(Rc<Fun>),
 }
 
 pub struct Environment {

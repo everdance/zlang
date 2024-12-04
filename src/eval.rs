@@ -20,7 +20,7 @@ fn eval_expr(exp: Expr, env: &Environment) -> Value {
         },
         Identifier => {
             if let Some(val) = env.get(&exp.token.val()) {
-                *val
+                val.clone()
             } else {
                 panic!("undefined variable")
             }
