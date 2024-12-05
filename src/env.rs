@@ -2,12 +2,13 @@ use std::{collections::HashMap, rc::Rc};
 
 use crate::expr::{self, Stmt};
 
+#[derive(Debug)]
 pub struct Object {
     class: String,
     props: HashMap<String, Value>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum Value {
     Nil,
     Str(String),
@@ -18,12 +19,19 @@ pub enum Value {
     Object(Rc<Object>),
 }
 
-pub struct Environment {
-    parent: Option<Box<Environment>>,
+pub fn new<'a>(parent: Option<&'a Environment<'a>>) -> Environment<'a> {
+    Environment {
+        parent,
+        map: HashMap::new(),
+    }
+}
+
+pub struct Environment<'a> {
+    parent: Option<&'a Environment<'a>>,
     map: HashMap<String, Value>,
 }
 
-impl Environment {
+impl Environment<'_> {
     pub fn get(&self, id: &str) -> Option<&Value> {
         match self.map.get(id) {
             Some(val) => Some(val),

@@ -1,5 +1,10 @@
-use crate::env::{Environment, Value};
-use crate::expr::{Expr, ExprType::*, Stmt};
+use crate::env::{self, Environment, Value};
+use crate::expr;
+use crate::expr::{
+    Expr,
+    ExprType::{self, *},
+    Stmt,
+};
 use crate::token::Kind;
 
 pub struct Eval;
@@ -8,9 +13,9 @@ impl Eval {
     pub fn exec(stmts: &[Stmt]) -> () {}
 }
 
-fn eval_expr(exp: Expr, env: &Environment) -> Value {
+fn eval_expr(exp: &Expr, ev: &Environment) -> Value {
     match exp.kind {
-        Literal => match exp.token.kind {
+        Literal => match exp.token.kind.clone() {
             Kind::NumLiteral(x) => Value::Num(x),
             Kind::StrLiteral(x) => Value::Str(x),
             Kind::True => Value::Bool(true),
@@ -19,20 +24,20 @@ fn eval_expr(exp: Expr, env: &Environment) -> Value {
             _ => unreachable!(),
         },
         Identifier => {
-            if let Some(val) = env.get(&exp.token.val()) {
+            if let Some(val) = ev.get(&exp.token.val()) {
                 val.clone()
             } else {
                 panic!("undefined variable")
             }
         }
-        Unary => match eval_expr(*exp.left.unwrap(), env) {
+        Unary => match eval_expr(exp.left.as_deref().unwrap(), ev) {
             Value::Bool(x) => Value::Bool(!x),
             Value::Num(x) => Value::Num(-x),
             _ => panic!("unexpected value"),
         },
         Binary => {
-            let left = eval_expr(*exp.left.unwrap(), env);
-            let right = eval_expr(*exp.right.unwrap(), env);
+            let left = eval_expr(exp.left.as_deref().unwrap(), ev);
+            let right = eval_expr(exp.right.as_deref().unwrap(), ev);
             match (left, right) {
                 (Value::Num(x), Value::Num(y)) => match exp.token.kind {
                     Kind::Star => Value::Num(x * y),
@@ -49,8 +54,8 @@ fn eval_expr(exp: Expr, env: &Environment) -> Value {
             }
         }
         Logical => {
-            let left = eval_expr(*exp.left.unwrap(), env);
-            let right = eval_expr(*exp.right.unwrap(), env);
+            let left = eval_expr(exp.left.as_deref().unwrap(), ev);
+            let right = eval_expr(exp.right.as_deref().unwrap(), ev);
             match (left, right) {
                 (Value::Bool(x), Value::Bool(y)) => {
                     if exp.token.kind == Kind::Or {
@@ -64,10 +69,45 @@ fn eval_expr(exp: Expr, env: &Environment) -> Value {
                 (_, _) => panic!("unexpected value for logic"),
             }
         }
-        Grouping => eval_expr(*exp.left.unwrap(), env),
-        // Call => Value::Nil,
-        // Assign => Value::Nil,
-        // Get => Value::Nil,
+        Grouping => eval_expr(exp.left.as_deref().unwrap(), ev),
+        Call => eval_call(exp.left.as_deref().unwrap(), exp.list.as_ref().unwrap(), ev),
+        Assign => eval_assign(exp, ev),
+        Get => eval_get(exp, ev),
         _ => Value::Nil,
     }
+}
+
+fn eval_call(callee: &Expr, params: &Vec<Expr>, ev: &Environment) -> Value {
+    // find func definition
+    let method = match callee.kind {
+        ExprType::Identifier => ev.get(&callee.token.val()).unwrap().clone(),
+        ExprType::Get => eval_get(callee, ev),
+        _ => unreachable!(),
+    };
+
+    let mut closure = env::new(Some(ev));
+
+    if let Value::Fun(fun) = method {
+        for (index, param) in fun.params.iter().enumerate() {
+            closure.set(param.clone(), eval_expr(params.get(index).unwrap(), ev));
+        }
+        for stmt in fun.body.iter() {
+            eval_stmt(stmt, &closure);
+        }
+    } else {
+        panic!("unexpected value for function:{:?}", method)
+    }
+    Value::Nil
+}
+
+fn eval_get(exp: &Expr, ev: &Environment) -> Value {
+    Value::Nil
+}
+
+fn eval_assign(exp: &Expr, ev: &Environment) -> Value {
+    Value::Nil
+}
+
+fn eval_stmt(stmt: &expr::Stmt, ev: &Environment) -> Value {
+    Value::Nil
 }
