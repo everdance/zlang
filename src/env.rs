@@ -14,7 +14,7 @@ pub enum Value {
     Num(f64),
     Bool(bool),
     Fun(Rc<expr::Fun>),
-    Class(Rc<expr::Class>),
+    Class(Rc<HashMap<String, expr::Fun>>),
     Object(Rc<Object>),
 }
 

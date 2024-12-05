@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::expr::{self, Expr, ExprType, Stmt};
 use crate::scan::Scanner;
 use crate::token::{Kind, Kind::*, Token};
@@ -79,33 +81,29 @@ impl ParseState<'_> {
             ));
         }
 
-        let mut stmts = vec![];
+        let mut methods = HashMap::new();
         loop {
             if self.matches(RightBrace) {
                 break;
             }
 
-            let res;
-
-            if self.matches(Kind::Var) {
-                res = self.var();
-            } else if self.matches(Kind::Fun) {
-                res = self.func();
+            if self.matches(Kind::Fun) {
+                match self.func() {
+                    Ok(Stmt::Fun(token, fun)) => methods.insert(token.val(), fun),
+                    Ok(_) => unreachable!(),
+                    Err(msg) => {
+                        return Err(msg);
+                    }
+                };
             } else {
                 return Err(format!(
                     "unexpected {:?} in class definition",
                     self.cur().unwrap()
                 ));
             }
-
-            if let Ok(stmt) = res {
-                stmts.push(stmt);
-            } else {
-                return res;
-            }
         }
 
-        Ok(Stmt::Class(token, stmts))
+        Ok(Stmt::Class(token, methods))
     }
 
     fn func(&mut self) -> Result<Stmt, String> {
@@ -138,7 +136,7 @@ impl ParseState<'_> {
             }
 
             if self.matches_identifier() {
-                params.push(self.prev().unwrap().clone());
+                params.push(self.prev().unwrap().val());
             } else {
                 return Err(format!(
                     "unexpected {:?} for function parameter",
@@ -154,18 +152,18 @@ impl ParseState<'_> {
             ));
         }
 
-        let mut stmts = vec![];
+        let mut body = vec![];
 
         loop {
             if self.matches(RightBrace) {
                 break;
             }
             match self.stmt() {
-                Ok(st) => stmts.push(st),
+                Ok(st) => body.push(st),
                 Err(msg) => return Err(msg),
             }
         }
-        Ok(Stmt::Fun(token, params, stmts))
+        Ok(Stmt::Fun(token, expr::Fun { params, body }))
     }
 
     fn var(&mut self) -> Result<Stmt, String> {
@@ -917,12 +915,12 @@ mod tests {
 
     #[test]
     fn class_def() {
-        let s = "class Test { var x = 0\nfun set(x) { this.x = super.x; return this } }";
+        let s = "class Test { fun set(x) { this.x = super.x; return this } }";
         match Parser::parse(s) {
             Ok(stmts) => {
                 assert_eq!(
                     to_string(&stmts),
-                    "Class(Test,[Var(x,0),Func(set,<x>,[Assign(Get(This, x), Get(Super, x)),Return(This)])])"
+                    "Class(Test,{set => <x>,[Assign(Get(This, x), Get(Super, x)),Return(This)]})"
                 )
             }
             Err(msg) => assert!(false, "parse class err:{}", msg),

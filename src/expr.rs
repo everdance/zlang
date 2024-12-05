@@ -144,8 +144,8 @@ pub fn list(t: Token, left: Expr, list: Vec<Expr>) -> Expr {
 
 #[derive(Debug)]
 pub struct Fun {
-    params: Vec<String>,
-    body: Vec<Stmt>,
+    pub params: Vec<String>,
+    pub body: Vec<Stmt>,
 }
 
 impl fmt::Display for Fun {
@@ -197,13 +197,14 @@ impl fmt::Display for Stmt {
             Stmt::For(list, stmts) => write!(f, "For([{}],{})", to_string(list), stmts),
             Stmt::Block(list) => write!(f, "Block({})", to_string(list)),
             Stmt::While(expr, stmts) => write!(f, "While({},{})", expr, stmts),
-            Stmt::Fun(t, func) => write!(f, "Func({}, {})", t.val(), func),
+            Stmt::Fun(t, func) => write!(f, "Func({},{})", t.val(), func),
             Stmt::Class(t, methods) => {
                 let mut methods_str = "".to_string();
                 for (name, m) in methods {
-                    methods_str = format!("{}, {name} => {m}", methods_str.as_str());
+                    methods_str = format!("{},{{{name} => {m}}}", methods_str.as_str());
                 }
-                write!(f, "Class({},[{}])", t.val(), methods_str.as_str())
+                methods_str = methods_str.trim_start_matches(",").to_string();
+                write!(f, "Class({},{})", t.val(), methods_str.as_str())
             }
         }
     }
