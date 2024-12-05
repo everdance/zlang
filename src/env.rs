@@ -1,10 +1,10 @@
 use std::{collections::HashMap, rc::Rc};
 
-use crate::expr::Stmt;
+use crate::expr::{self, Stmt};
 
-pub struct Fun {
-    params: Vec<String>,
-    body: Vec<Stmt>,
+pub struct Object {
+    class: String,
+    props: HashMap<String, Value>,
 }
 
 #[derive(Clone)]
@@ -13,7 +13,9 @@ pub enum Value {
     Str(String),
     Num(f64),
     Bool(bool),
-    Fun(Rc<Fun>),
+    Fun(Rc<expr::Fun>),
+    Class(Rc<expr::Class>),
+    Object(Rc<Object>),
 }
 
 pub struct Environment {

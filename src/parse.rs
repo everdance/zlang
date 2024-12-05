@@ -381,8 +381,8 @@ impl ParseState<'_> {
     fn retstmt(&mut self) -> Result<Stmt, String> {
         let token = self.prev().unwrap().clone();
         match self.expr() {
-            Ok(expr) => Ok(Stmt::Return(token, expr)),
-            Err(msg) => Err(msg),
+            Ok(expr) => Ok(Stmt::Return(expr)),
+            Err(msg) => Err(format!("{} at {:?}", msg, token)),
         }
     }
 
