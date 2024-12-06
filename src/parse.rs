@@ -2,7 +2,10 @@ use std::collections::HashMap;
 
 use crate::expr::{self, Expr, ExprType, Stmt};
 use crate::scan::Scanner;
-use crate::token::{Kind, Kind::*, Token};
+use crate::token::{
+    Kind::{self, *},
+    Token,
+};
 
 pub struct Parser;
 
@@ -21,36 +24,39 @@ impl Parser {
         }
 
         let mut state = ParseState {
-            tokens: &tokens,
             cursor: 0,
-            stmts: vec![],
+            tokens: &tokens,
         };
 
-        while state.cursor < tokens.len() {
-            if state.matches_any(vec![Kind::Comment, Kind::Semicolon]) {
-                continue;
-            }
-
-            match state.parse() {
-                Ok(stmt) => state.stmts.push(stmt),
-                Err(msg) => return Err(msg),
-            }
-        }
-
-        Ok(state.stmts)
+        state.parse()
     }
 }
 
 struct ParseState<'a> {
     tokens: &'a [Token],
     cursor: usize,
-    stmts: Vec<Stmt>,
 }
 
-impl ParseState<'_> {
+impl<'a> ParseState<'a> {
+    fn parse(&mut self) -> Result<Vec<Stmt>, String> {
+        let mut stmts = vec![];
+
+        while self.cursor < self.tokens.len() {
+            if self.matches_any(vec![Kind::Comment, Kind::Semicolon]) {
+                continue;
+            }
+
+            match self.parse_stmt() {
+                Ok(stmt) => stmts.push(stmt),
+                Err(msg) => return Err(msg),
+            }
+        }
+
+        Ok(stmts)
+    }
     // group 1: high level language syntax
     //          function, class, variable definition
-    fn parse(&mut self) -> Result<Stmt, String> {
+    fn parse_stmt(&mut self) -> Result<Stmt, String> {
         if self.matches(Kind::Class) {
             self.class()
         } else if self.matches(Kind::Fun) {
@@ -63,10 +69,10 @@ impl ParseState<'_> {
     }
 
     fn class(&mut self) -> Result<Stmt, String> {
-        let token: Token;
+        let name: Token;
 
         if self.matches_identifier() {
-            token = self.prev().unwrap().clone();
+            name = self.prev().unwrap().clone();
         } else {
             return Err(format!(
                 "expect identifier, got {:?}",
@@ -89,7 +95,7 @@ impl ParseState<'_> {
 
             if self.matches(Kind::Fun) {
                 match self.func() {
-                    Ok(Stmt::Fun(token, fun)) => methods.insert(token.val(), fun),
+                    Ok(Stmt::Fun(func)) => methods.insert(func.name.val(), func),
                     Ok(_) => unreachable!(),
                     Err(msg) => {
                         return Err(msg);
@@ -103,14 +109,14 @@ impl ParseState<'_> {
             }
         }
 
-        Ok(Stmt::Class(token, methods))
+        Ok(Stmt::Class(expr::Class { name, methods }))
     }
 
     fn func(&mut self) -> Result<Stmt, String> {
-        let token: Token;
+        let name: Token;
 
         if self.matches_identifier() {
-            token = self.prev().unwrap().clone();
+            name = self.prev().unwrap().clone();
         } else {
             return Err(format!(
                 "expect function identifier, got {:?}",
@@ -136,7 +142,7 @@ impl ParseState<'_> {
             }
 
             if self.matches_identifier() {
-                params.push(self.prev().unwrap().val());
+                params.push(self.prev().unwrap().clone());
             } else {
                 return Err(format!(
                     "unexpected {:?} for function parameter",
@@ -163,7 +169,7 @@ impl ParseState<'_> {
                 Err(msg) => return Err(msg),
             }
         }
-        Ok(Stmt::Fun(token, expr::Fun { params, body }))
+        Ok(Stmt::Fun(expr::Fun { name, params, body }))
     }
 
     fn var(&mut self) -> Result<Stmt, String> {
@@ -667,7 +673,7 @@ impl ParseState<'_> {
                     } else {
                         return Err(format!(
                             "expect right paren after {:?}",
-                            self.prev().unwrap().clone()
+                            self.prev().unwrap()
                         ));
                     }
                 }

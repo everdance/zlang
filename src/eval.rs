@@ -77,7 +77,7 @@ fn eval_expr(exp: &Expr, ev: &Environment) -> Value {
     }
 }
 
-fn eval_call(callee: &Expr, params: &Vec<Expr>, ev: &Environment) -> Value {
+fn eval_call(callee: &Expr, params: &[Expr], ev: &Environment) -> Value {
     // find func definition
     let method = match callee.kind {
         ExprType::Identifier => ev.get(&callee.token.val()).unwrap().clone(),

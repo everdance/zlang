@@ -144,7 +144,8 @@ pub fn list(t: Token, left: Expr, list: Vec<Expr>) -> Expr {
 
 #[derive(Debug)]
 pub struct Fun {
-    pub params: Vec<String>,
+    pub name: Token,
+    pub params: Vec<Token>,
     pub body: Vec<Stmt>,
 }
 
@@ -153,12 +154,35 @@ impl fmt::Display for Fun {
         let params = self
             .params
             .iter()
-            .map(|x| x.clone() + ",")
+            .map(|x| x.val() + ",")
             .collect::<String>()
             .trim_end_matches(",")
             .to_string();
 
-        write!(f, "<{}>,[{}]", params, to_string(&self.body))
+        write!(
+            f,
+            "Fun({}, <{}>,[{}])",
+            self.name.val(),
+            params,
+            to_string(&self.body)
+        )
+    }
+}
+
+#[derive(Debug)]
+pub struct Class {
+    pub name: Token,
+    pub methods: HashMap<String, Fun>,
+}
+
+impl fmt::Display for Class {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut methods_str = "".to_string();
+        for (name, m) in self.methods.iter() {
+            methods_str = format!("{},{{{name} => {m}}}", methods_str.as_str());
+        }
+        methods_str = methods_str.trim_start_matches(",").to_string();
+        write!(f, "Class({},{})", self.name.val(), methods_str.as_str())
     }
 }
 
@@ -171,8 +195,8 @@ pub enum Stmt {
     For(Vec<Stmt>, Box<Stmt>),
     Block(Vec<Stmt>),
     While(Expr, Box<Stmt>),
-    Fun(Token, Fun),
-    Class(Token, HashMap<String, Fun>),
+    Fun(Fun),
+    Class(Class),
 }
 
 pub fn to_string(list: &Vec<Stmt>) -> String {
@@ -197,15 +221,8 @@ impl fmt::Display for Stmt {
             Stmt::For(list, stmts) => write!(f, "For([{}],{})", to_string(list), stmts),
             Stmt::Block(list) => write!(f, "Block({})", to_string(list)),
             Stmt::While(expr, stmts) => write!(f, "While({},{})", expr, stmts),
-            Stmt::Fun(t, func) => write!(f, "Func({},{})", t.val(), func),
-            Stmt::Class(t, methods) => {
-                let mut methods_str = "".to_string();
-                for (name, m) in methods {
-                    methods_str = format!("{},{{{name} => {m}}}", methods_str.as_str());
-                }
-                methods_str = methods_str.trim_start_matches(",").to_string();
-                write!(f, "Class({},{})", t.val(), methods_str.as_str())
-            }
+            Stmt::Fun(func) => write!(f, "{func}"),
+            Stmt::Class(cls) => write!(f, "{cls}"),
         }
     }
 }
