@@ -214,60 +214,69 @@ impl<'a> ParseState<'a> {
             ));
         }
 
-        let mut exprs = vec![];
-        loop {
-            if self.matches(RightParen) {
-                break;
-            }
+        let mut var = None;
+        let mut cond = None;
+        let mut incr = None;
 
-            if self.matches(Semicolon) {
-                continue;
-            }
-
-            if self.matches(Var) {
-                if exprs.len() != 0 {
-                    return Err(format!(
-                        "repeated var definition: {:?}",
-                        self.prev().unwrap().clone()
-                    ));
-                }
-
-                match self.var() {
-                    Ok(def) => exprs.push(def),
-                    Err(msg) => return Err(msg),
-                }
-            } else {
-                match self.exprstmt() {
-                    Ok(epx) => exprs.push(epx),
-                    Err(msg) => return Err(msg),
-                }
+        if self.matches(Var) {
+            match self.var() {
+                Ok(def) => var = Some(Box::new(def)),
+                Err(msg) => return Err(msg),
             }
         }
 
-        if exprs.len() != 1 && exprs.len() != 3 {
+        if !self.matches(Semicolon) {
             return Err(format!(
-                "unexpected <for> expression length:{}",
-                exprs.len()
+                "expect semicoln, got {:?}",
+                self.cur().unwrap().clone()
             ));
         }
 
-        let cond_stmt = if exprs.len() == 1 {
-            &exprs[0]
-        } else {
-            &exprs[1]
-        };
-
-        match cond_stmt {
-            Stmt::Expr(cond) => {
-                if !cond.is_logic() {
-                    return Err(format!("expect logic expression, got {}", cond));
+        if self.cur().unwrap().kind != Semicolon {
+            match self.exprstmt() {
+                Ok(epx) => {
+                    match &epx {
+                        Stmt::Expr(cond) => {
+                            if !cond.is_logic() {
+                                return Err(format!("expect logic expression, got {}", cond));
+                            }
+                        }
+                        _ => unreachable!(),
+                    };
+                    cond = Some(Box::new(epx));
                 }
-            }
-            _ => unreachable!(),
+                Err(msg) => return Err(msg),
+            };
+        }
+
+        if !self.matches(Semicolon) {
+            return Err(format!(
+                "expect semicoln, got {:?}",
+                self.cur().unwrap().clone()
+            ));
+        }
+
+        if self.cur().unwrap().kind != Semicolon {
+            match self.exprstmt() {
+                Ok(epx) => incr = Some(Box::new(epx)),
+                Err(msg) => return Err(msg),
+            };
+        }
+
+        if !self.matches(RightParen) {
+            return Err(format!(
+                "expect right paren, got {:?}",
+                self.cur().unwrap().clone()
+            ));
         }
 
         match self.block_or_expr() {
-            Ok(stmt) => Ok(Stmt::For(exprs, Box::new(stmt))),
+            Ok(body) => Ok(Stmt::For(expr::For {
+                var,
+                cond,
+                incr,
+                body,
+            })),
             Err(msg) => Err(msg),
         }
     }
@@ -281,7 +290,7 @@ impl<'a> ParseState<'a> {
         }
 
         let cond: Expr;
-        let ifstmt: Stmt;
+        let ifstmt: Vec<Stmt>;
         match self.exprstmt() {
             Ok(Stmt::Expr(c)) => {
                 cond = c;
@@ -306,17 +315,17 @@ impl<'a> ParseState<'a> {
         };
 
         if !self.matches(Else) {
-            return Ok(Stmt::If(cond, Box::new(ifstmt), None));
+            return Ok(Stmt::If(cond, ifstmt, None));
         }
 
         if self.matches(If) {
             match self.ifelsestmt() {
-                Ok(elsestmt) => Ok(Stmt::If(cond, Box::new(ifstmt), Some(Box::new(elsestmt)))),
+                Ok(elsestmt) => Ok(Stmt::If(cond, ifstmt, Some(vec![elsestmt]))),
                 Err(msg) => Err(msg),
             }
         } else {
             match self.block_or_expr() {
-                Ok(elsestmt) => Ok(Stmt::If(cond, Box::new(ifstmt), Some(Box::new(elsestmt)))),
+                Ok(elsestmt) => Ok(Stmt::If(cond, ifstmt, Some(elsestmt))),
                 Err(msg) => Err(msg),
             }
         }
@@ -344,7 +353,7 @@ impl<'a> ParseState<'a> {
                 }
 
                 match self.block_or_expr() {
-                    Ok(stmt) => Ok(Stmt::While(cond, Box::new(stmt))),
+                    Ok(stmt) => Ok(Stmt::While(cond, stmt)),
                     Err(msg) => Err(msg),
                 }
             }
@@ -353,11 +362,14 @@ impl<'a> ParseState<'a> {
         }
     }
 
-    fn block_or_expr(&mut self) -> Result<Stmt, String> {
+    fn block_or_expr(&mut self) -> Result<Vec<Stmt>, String> {
         if self.matches(Kind::LeftBrace) {
-            return self.blockstmt();
+            return self.blockstmt().map(|stmt| match stmt {
+                Stmt::Block(v) => v,
+                _ => unreachable!(),
+            });
         } else {
-            return self.exprstmt();
+            self.exprstmt().map(|stmt| vec![stmt])
         }
     }
 

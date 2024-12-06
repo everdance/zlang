@@ -13,7 +13,7 @@ impl Eval {
     pub fn exec(stmts: &[Stmt]) -> () {}
 }
 
-fn eval_expr(exp: &Expr, ev: &Environment) -> Value {
+fn eval_expr<'a>(exp: &Expr, ev: &'a mut Environment<'a>) -> Value<'a> {
     match exp.kind {
         Literal => match exp.token.kind.clone() {
             Kind::NumLiteral(x) => Value::Num(x),
@@ -77,11 +77,11 @@ fn eval_expr(exp: &Expr, ev: &Environment) -> Value {
     }
 }
 
-fn eval_call(callee: &Expr, params: &[Expr], ev: &Environment) -> Value {
+fn eval_call<'a>(callee: &Expr, params: &[Expr], ev: &'a mut Environment<'a>) -> Value<'a> {
     // find func definition
     let method = match callee.kind {
-        ExprType::Identifier => ev.get(&callee.token.val()).unwrap().clone(),
-        ExprType::Get => eval_get(callee, ev),
+        ExprType::Identifier => ev.get(&callee.token.val()).unwrap(),
+        ExprType::Get => &eval_get(callee, ev),
         _ => unreachable!(),
     };
 
@@ -89,7 +89,7 @@ fn eval_call(callee: &Expr, params: &[Expr], ev: &Environment) -> Value {
 
     if let Value::Fun(fun) = method {
         for (index, param) in fun.params.iter().enumerate() {
-            closure.set(param.clone(), eval_expr(params.get(index).unwrap(), ev));
+            closure.set(param.val(), eval_expr(params.get(index).unwrap(), ev));
         }
         for stmt in fun.body.iter() {
             eval_stmt(stmt, &closure);
@@ -100,14 +100,79 @@ fn eval_call(callee: &Expr, params: &[Expr], ev: &Environment) -> Value {
     Value::Nil
 }
 
-fn eval_get(exp: &Expr, ev: &Environment) -> Value {
+fn eval_get<'a>(exp: &Expr, ev: &'a mut Environment<'a>) -> Value<'a> {
     Value::Nil
 }
 
-fn eval_assign(exp: &Expr, ev: &Environment) -> Value {
+fn eval_assign<'a>(exp: &Expr, ev: &'a mut Environment<'a>) -> Value<'a> {
     Value::Nil
 }
 
-fn eval_stmt(stmt: &expr::Stmt, ev: &Environment) -> Value {
-    Value::Nil
+fn eval_stmt<'a>(stmt: &expr::Stmt, ev: &'a mut Environment<'a>) -> Value<'a> {
+    match stmt {
+        Stmt::Expr(exp) => eval_expr(exp, ev),
+        Stmt::Var(name, exp) => {
+            let val = match exp {
+                Some(epr) => eval_expr(epr, ev),
+                _ => Value::Nil,
+            };
+            ev.set(name.val(), val);
+            Value::Nil
+        }
+        Stmt::Return(epr) => Value::Nil, //TODO
+        Stmt::If(cond, ifstmt, elsest) => match eval_expr(cond, ev) {
+            Value::Bool(true) => {
+                for st in ifstmt.iter() {
+                    eval_stmt(st, ev);
+                }
+                Value::Nil
+            }
+            Value::Bool(false) => {
+                if let Some(stmts) = elsest {
+                    for st in stmts.iter() {
+                        eval_stmt(st, ev);
+                    }
+                }
+                Value::Nil
+            }
+            _ => unreachable!(),
+        },
+        Stmt::While(cond, stmts) => {
+            loop {
+                match eval_expr(cond, ev) {
+                    Value::Bool(true) => (),
+                    _ => break,
+                }
+                for stmt in stmts.iter() {
+                    eval_stmt(stmt, ev);
+                }
+            }
+            Value::Nil
+        }
+        Stmt::For(stmt) => {
+            if let Some(st) = &stmt.var {
+                eval_stmt(st, ev);
+            }
+            loop {
+                if let Some(cond) = &stmt.cond {
+                    match eval_stmt(cond, ev) {
+                        Value::Bool(true) => (),
+                        _ => break,
+                    }
+                }
+                for stmt in stmt.body.iter() {
+                    eval_stmt(stmt, ev);
+                }
+            }
+            Value::Nil
+        }
+        Stmt::Block(stmts) => {
+            for stmt in stmts.iter() {
+                eval_stmt(stmt, ev);
+            }
+            Value::Nil
+        }
+        Stmt::Fun(fun) => Value::Nil,
+        Stmt::Class(cls) => Value::Nil,
+    }
 }

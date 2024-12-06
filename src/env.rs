@@ -1,25 +1,24 @@
+use crate::expr;
 use std::{collections::HashMap, rc::Rc};
 
-use crate::expr::{self, Stmt};
-
 #[derive(Debug)]
-pub struct Object {
+pub struct Object<'a> {
     class: String,
-    props: HashMap<String, Value>,
+    props: HashMap<String, Value<'a>>,
 }
 
 #[derive(Debug, Clone)]
-pub enum Value {
+pub enum Value<'a> {
     Nil,
     Str(String),
     Num(f64),
     Bool(bool),
-    Fun(Rc<expr::Fun>),
-    Class(Rc<HashMap<String, expr::Fun>>),
-    Object(Rc<Object>),
+    Fun(&'a expr::Fun),
+    Class(HashMap<String, &'a expr::Fun>),
+    Object(Rc<Object<'a>>),
 }
 
-pub fn new<'a>(parent: Option<&'a Environment<'a>>) -> Environment<'a> {
+pub fn new(parent: Option<Rc<Environment>>) -> Environment {
     Environment {
         parent,
         map: HashMap::new(),
@@ -27,11 +26,11 @@ pub fn new<'a>(parent: Option<&'a Environment<'a>>) -> Environment<'a> {
 }
 
 pub struct Environment<'a> {
-    parent: Option<&'a Environment<'a>>,
-    map: HashMap<String, Value>,
+    parent: Option<Rc<Environment<'a>>>,
+    map: HashMap<String, Value<'a>>,
 }
 
-impl Environment<'_> {
+impl<'a> Environment<'a> {
     pub fn get(&self, id: &str) -> Option<&Value> {
         match self.map.get(id) {
             Some(val) => Some(val),
@@ -45,7 +44,7 @@ impl Environment<'_> {
         }
     }
 
-    pub fn set(&mut self, id: String, val: Value) {
+    pub fn set(&mut self, id: String, val: Value<'a>) {
         self.map.insert(id, val);
     }
 }
