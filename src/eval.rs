@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::env::{self, Environment, Environments, Value};
+use crate::env::{self, Environments, Value};
 use crate::expr;
 use crate::expr::{
     Expr,
@@ -13,46 +13,57 @@ pub struct Eval;
 
 impl Eval {
     pub fn exec(stmts: &[Stmt]) -> () {
-        let mut eval = evaluator { envs: env::new() };
-        let mut global = eval.new_env(1);
+        let mut eval = Evaluator { envs: env::new() };
         for stmt in stmts.iter() {
-            eval.eval_stmt(stmt, &mut global);
+            eval.stmt(stmt);
         }
     }
 }
 
-struct evaluator {
+struct Evaluator {
     envs: Environments,
 }
 
-impl evaluator {
-    fn new_env(&mut self, current: usize) -> Environment {
-        return self.envs.new_stack(current);
+impl Evaluator {
+    fn pop(&mut self) {
+        self.envs.pop();
     }
 
-    fn eval_stmt(&mut self, stmt: &expr::Stmt, ev: &mut Environment) -> Value {
+    fn new_env(&mut self, ev: Option<HashMap<String, Value>>) {
+        return self.envs.push(ev);
+    }
+
+    fn set_val(&mut self, id: String, val: Value) {
+        self.envs.set(id, val);
+    }
+
+    fn get_val(&mut self, id: &str) -> Option<&Value> {
+        self.envs.get(id)
+    }
+
+    fn stmt(&mut self, stmt: &expr::Stmt) -> Value {
         match stmt {
-            Stmt::Expr(exp) => self.eval_expr(exp, ev),
+            Stmt::Expr(exp) => self.expr(exp),
             Stmt::Var(name, exp) => {
                 let val = match exp {
-                    Some(epr) => self.eval_expr(epr, ev),
+                    Some(epr) => self.expr(epr),
                     _ => Value::Nil,
                 };
-                ev.set(name.val(), val);
+                self.set_val(name.val(), val);
                 Value::Nil
             }
             Stmt::Return(epr) => Value::Nil, //TODO
-            Stmt::If(cond, ifstmt, elsest) => match self.eval_expr(cond, ev) {
+            Stmt::If(cond, ifstmt, elsest) => match self.expr(cond) {
                 Value::Bool(true) => {
                     for st in ifstmt.iter() {
-                        self.eval_stmt(st, ev);
+                        self.stmt(st);
                     }
                     Value::Nil
                 }
                 Value::Bool(false) => {
                     if let Some(stmts) = elsest {
                         for st in stmts.iter() {
-                            self.eval_stmt(st, ev);
+                            self.stmt(st);
                         }
                     }
                     Value::Nil
@@ -61,36 +72,36 @@ impl evaluator {
             },
             Stmt::While(cond, stmts) => {
                 loop {
-                    match self.eval_expr(cond, ev) {
+                    match self.expr(cond) {
                         Value::Bool(true) => (),
                         _ => break,
                     }
                     for stmt in stmts.iter() {
-                        self.eval_stmt(stmt, ev);
+                        self.stmt(stmt);
                     }
                 }
                 Value::Nil
             }
             Stmt::For(stmt) => {
                 if let Some(st) = &stmt.var {
-                    self.eval_stmt(st, ev);
+                    self.stmt(st);
                 }
                 loop {
                     if let Some(cond) = &stmt.cond {
-                        match self.eval_stmt(cond, ev) {
+                        match self.stmt(cond) {
                             Value::Bool(true) => (),
                             _ => break,
                         }
                     }
                     for stmt in stmt.body.iter() {
-                        self.eval_stmt(stmt, ev);
+                        self.stmt(stmt);
                     }
                 }
                 Value::Nil
             }
             Stmt::Block(stmts) => {
                 for stmt in stmts.iter() {
-                    self.eval_stmt(stmt, ev);
+                    self.stmt(stmt);
                 }
                 Value::Nil
             }
@@ -99,7 +110,7 @@ impl evaluator {
         }
     }
 
-    fn eval_expr(&mut self, exp: &Expr, ev: &mut Environment) -> Value {
+    fn expr(&mut self, exp: &Expr) -> Value {
         match exp.kind {
             Literal => match exp.token.kind.clone() {
                 Kind::NumLiteral(x) => Value::Num(x),
@@ -110,20 +121,20 @@ impl evaluator {
                 _ => unreachable!(),
             },
             Identifier => {
-                if let Some(val) = ev.get(&exp.token.val()) {
+                if let Some(val) = self.get_val(&exp.token.val()) {
                     val.clone()
                 } else {
                     panic!("undefined variable")
                 }
             }
-            Unary => match self.eval_expr(exp.left.as_deref().unwrap(), ev) {
+            Unary => match self.expr(exp.left.as_deref().unwrap()) {
                 Value::Bool(x) => Value::Bool(!x),
                 Value::Num(x) => Value::Num(-x),
                 _ => panic!("unexpected value"),
             },
             Binary => {
-                let left = self.eval_expr(exp.left.as_deref().unwrap(), ev);
-                let right = self.eval_expr(exp.right.as_deref().unwrap(), ev);
+                let left = self.expr(exp.left.as_deref().unwrap());
+                let right = self.expr(exp.right.as_deref().unwrap());
                 match (left, right) {
                     (Value::Num(x), Value::Num(y)) => match exp.token.kind {
                         Kind::Star => Value::Num(x * y),
@@ -140,8 +151,8 @@ impl evaluator {
                 }
             }
             Logical => {
-                let left = self.eval_expr(exp.left.as_deref().unwrap(), ev);
-                let right = self.eval_expr(exp.right.as_deref().unwrap(), ev);
+                let left = self.expr(exp.left.as_deref().unwrap());
+                let right = self.expr(exp.right.as_deref().unwrap());
                 match (left, right) {
                     (Value::Bool(x), Value::Bool(y)) => {
                         if exp.token.kind == Kind::Or {
@@ -155,31 +166,32 @@ impl evaluator {
                     (_, _) => panic!("unexpected value for logic"),
                 }
             }
-            Grouping => self.eval_expr(exp.left.as_deref().unwrap(), ev),
-            Call => self.eval_call(exp.left.as_deref().unwrap(), exp.list.as_ref().unwrap(), ev),
-            Assign => self.eval_assign(exp, ev),
-            Get => self.eval_get(exp, ev),
+            Grouping => self.expr(exp.left.as_deref().unwrap()),
+            Call => self.call(exp.left.as_deref().unwrap(), exp.list.as_ref().unwrap()),
+            Assign => self.assign(exp),
+            Get => self.get(exp),
             _ => Value::Nil,
         }
     }
 
-    fn eval_call(&mut self, callee: &Expr, params: &[Expr], ev: &mut Environment) -> Value {
+    fn call(&mut self, callee: &Expr, params: &[Expr]) -> Value {
         // find func definition
         let method = match callee.kind {
-            ExprType::Identifier => ev.get(&callee.token.val()).unwrap().clone(),
-            ExprType::Get => self.eval_get(callee, ev),
+            ExprType::Identifier => self.get_val(&callee.token.val()).unwrap().clone(),
+            ExprType::Get => self.get(callee),
+
             _ => unreachable!(),
         };
 
         if let Value::Fun(fun) = method {
-            let mut closure = self.new_env(ev.depth());
-
+            let mut closure = HashMap::new();
             for (index, param) in fun.params.iter().enumerate() {
-                closure.set(param.val(), self.eval_expr(params.get(index).unwrap(), ev));
+                closure.insert(param.val(), self.expr(params.get(index).unwrap()));
             }
+            self.new_env(Some(closure));
 
             for stmt in fun.body.iter() {
-                self.eval_stmt(stmt, &mut closure);
+                self.stmt(stmt);
             }
         } else {
             panic!("unexpected value for function:{:?}", method)
@@ -187,11 +199,11 @@ impl evaluator {
         Value::Nil
     }
 
-    fn eval_get(&mut self, exp: &Expr, ev: &mut Environment) -> Value {
+    fn get(&mut self, exp: &Expr) -> Value {
         Value::Nil
     }
 
-    fn eval_assign(&mut self, exp: &Expr, ev: &mut Environment) -> Value {
+    fn assign(&mut self, exp: &Expr) -> Value {
         Value::Nil
     }
 }

@@ -22,24 +22,12 @@ pub fn new() -> Environments {
 }
 
 impl Environments {
-    pub fn new_stack(&mut self, depth: usize) -> Environment {
-        self.stack.truncate(depth - 1);
-        self.stack.push(HashMap::new());
-        Environment {
-            stack: &mut self.stack,
-            depth,
-        }
+    pub fn push(&mut self, hm: Option<HashMap<String, Value>>) {
+        self.stack.push(hm.unwrap_or_default());
     }
-}
 
-pub struct Environment<'a> {
-    stack: &'a mut [HashMap<String, Value>],
-    depth: usize,
-}
-
-impl<'a> Environment<'a> {
-    pub fn depth(&self) -> usize {
-        self.depth
+    pub fn pop(&mut self) {
+        self.stack.pop();
     }
 
     pub fn get(&self, id: &str) -> Option<&Value> {
