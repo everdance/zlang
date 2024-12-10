@@ -252,27 +252,25 @@ impl<'a> ParseState<'a> {
                 }
                 Err(msg) => return Err(msg),
             };
+            if !self.matches(Semicolon) {
+                return Err(format!(
+                    "expect semicolon after condition, got {:?}",
+                    self.cur().unwrap().clone()
+                ));
+            }
         }
 
-        if !self.matches(Semicolon) {
-            return Err(format!(
-                "expect semicolon after condition, got {:?}",
-                self.cur().unwrap().clone()
-            ));
-        }
-
-        if !self.matches(Semicolon) {
+        if !self.matches(RightParen) {
             match self.exprstmt() {
                 Ok(epx) => incr = Some(Box::new(epx)),
                 Err(msg) => return Err(msg),
             };
-        }
-
-        if !self.matches(RightParen) {
-            return Err(format!(
-                "expect right paren, got {:?}",
-                self.cur().unwrap().clone()
-            ));
+            if !self.matches(RightParen) {
+                return Err(format!(
+                    "expect right paren, got {:?}",
+                    self.cur().unwrap().clone()
+                ));
+            }
         }
 
         match self.block_or_expr() {
@@ -915,6 +913,17 @@ mod tests {
                            "For(<Var(x,0),LessEqual(x, 10),Assign(x, Plus(x, 1))>,[Assign(y, Minus(y, 2))])")
             }
             Err(msg) => assert!(false, "parse while err:{}", msg),
+        }
+    }
+
+    #[test]
+    fn for_empty_def() {
+        let s = "for (;;) {}";
+        match Parser::parse(s) {
+            Ok(stmts) => {
+                assert_eq!(to_string(&stmts), "For(<>,[])")
+            }
+            Err(msg) => assert!(false, "parse for err:{}", msg),
         }
     }
 
