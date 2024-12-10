@@ -155,14 +155,14 @@ impl fmt::Display for For {
         let param = [&self.var, &self.cond, &self.incr]
             .iter()
             .map(|e| match e {
-                Some(exp) => format!("{exp}"),
+                Some(exp) => format!("{exp},"),
                 _ => "".to_string(),
             })
             .collect::<String>()
             .trim_end_matches(",")
             .to_string();
 
-        write!(f, "For([{param}],{})", to_string(&self.body))
+        write!(f, "For(<{param}>,[{}])", to_string(&self.body))
     }
 }
 
@@ -185,7 +185,7 @@ impl fmt::Display for Fun {
 
         write!(
             f,
-            "Fun({}, <{}>,[{}])",
+            "Fun({},<{}>,[{}])",
             self.name.val(),
             params,
             to_string(&self.body)
@@ -202,8 +202,8 @@ pub struct Class {
 impl fmt::Display for Class {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut methods_str = "".to_string();
-        for (name, m) in self.methods.iter() {
-            methods_str = format!("{},{{{name} => {m}}}", methods_str.as_str());
+        for (_, m) in self.methods.iter() {
+            methods_str = format!("{},{{{m}}}", methods_str.as_str());
         }
         methods_str = methods_str.trim_start_matches(",").to_string();
         write!(f, "Class({},{})", self.name.val(), methods_str.as_str())
@@ -238,12 +238,18 @@ impl fmt::Display for Stmt {
             Stmt::Var(t, None) => write!(f, "Var({})", t.val()),
             Stmt::Return(expr) => write!(f, "Return({})", expr),
             Stmt::Var(t, Some(expr)) => write!(f, "Var({},{})", t.val(), expr),
-            Stmt::If(expr, stmts, None) => write!(f, "If({},{})", expr, to_string(&stmts)),
+            Stmt::If(expr, stmts, None) => write!(f, "If({},[{}])", expr, to_string(&stmts)),
             Stmt::If(expr, stmts, Some(elst)) => {
-                write!(f, "If({},{},{})", expr, to_string(&stmts), to_string(&elst))
+                write!(
+                    f,
+                    "If({},[{}],[{}])",
+                    expr,
+                    to_string(&stmts),
+                    to_string(&elst)
+                )
             }
             Stmt::Block(list) => write!(f, "Block({})", to_string(list)),
-            Stmt::While(expr, stmts) => write!(f, "While({},{})", expr, to_string(&stmts)),
+            Stmt::While(expr, stmts) => write!(f, "While({},[{}])", expr, to_string(&stmts)),
             Stmt::For(exp) => write!(f, "{exp}"),
             Stmt::Fun(func) => write!(f, "{func}"),
             Stmt::Class(cls) => write!(f, "{cls}"),

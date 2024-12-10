@@ -164,6 +164,11 @@ impl<'a> ParseState<'a> {
             if self.matches(RightBrace) {
                 break;
             }
+
+            if self.matches(Semicolon) {
+                continue;
+            }
+
             match self.stmt() {
                 Ok(st) => body.push(st),
                 Err(msg) => return Err(msg),
@@ -227,12 +232,12 @@ impl<'a> ParseState<'a> {
 
         if !self.matches(Semicolon) {
             return Err(format!(
-                "expect semicoln, got {:?}",
+                "expect semicolon after initializer, got {:?}",
                 self.cur().unwrap().clone()
             ));
         }
 
-        if self.cur().unwrap().kind != Semicolon {
+        if !self.matches(Semicolon) {
             match self.exprstmt() {
                 Ok(epx) => {
                     match &epx {
@@ -251,12 +256,12 @@ impl<'a> ParseState<'a> {
 
         if !self.matches(Semicolon) {
             return Err(format!(
-                "expect semicoln, got {:?}",
+                "expect semicolon after condition, got {:?}",
                 self.cur().unwrap().clone()
             ));
         }
 
-        if self.cur().unwrap().kind != Semicolon {
+        if !self.matches(Semicolon) {
             match self.exprstmt() {
                 Ok(epx) => incr = Some(Box::new(epx)),
                 Err(msg) => return Err(msg),
@@ -422,7 +427,7 @@ impl<'a> ParseState<'a> {
     //           super, this, identifer, grouping
     //           number, string, bool, nil, etc
     fn expr(&mut self) -> Result<Expr, String> {
-        let res = match self.or() {
+        match self.or() {
             Ok(left) => {
                 if self.matches(Kind::Equal) {
                     let eq = self.prev().unwrap().clone();
@@ -434,19 +439,11 @@ impl<'a> ParseState<'a> {
                         Err(e) => return Err(e),
                     }
                 } else {
-                    return Ok(left);
+                    Ok(left)
                 }
             }
             Err(e) => Err(e),
-        };
-
-        // consume any appended semicolon after expression
-        match res {
-            Ok(_) => self.matches(Semicolon),
-            _ => false,
-        };
-
-        res
+        }
     }
 
     fn or(&mut self) -> Result<Expr, String> {
@@ -624,6 +621,7 @@ impl<'a> ParseState<'a> {
                 if self.matches_identifier() {
                     let right = expr::single(self.prev().unwrap().clone());
                     epx = expr::binary(dot, epx, right);
+                    println!("{epx}");
                 } else {
                     return Err(format!(
                         "expect identifier, got {:?}",
@@ -850,7 +848,7 @@ mod tests {
         let s = "if (x == 1) y = 2;";
         match Parser::parse(s) {
             Ok(stmts) => {
-                assert_eq!(to_string(&stmts), "If(DoubleEqual(x, 1),Assign(y, 2))")
+                assert_eq!(to_string(&stmts), "If(DoubleEqual(x, 1),[Assign(y, 2)])")
             }
             Err(msg) => assert!(false, "parse if err:{}", msg),
         }
@@ -863,7 +861,7 @@ mod tests {
             Ok(stmts) => {
                 assert_eq!(
                     to_string(&stmts),
-                    "If(BangEqual(x, y),Block(Assign(y, 2)),If(Greater(x, 3),Block(Assign(y, 3)),Block(Assign(y, 5))))")
+                    "If(BangEqual(x, y),[Assign(y, 2)],[If(Greater(x, 3),[Assign(y, 3)],[Assign(y, 5)])])")
             }
             Err(msg) => assert!(false, "parse if else err:{}", msg),
         }
@@ -887,7 +885,7 @@ mod tests {
             Ok(stmts) => {
                 assert_eq!(
                     to_string(&stmts),
-                    "While(True,Block(Assign(a, 1),Assign(x, Star(y, 2))))"
+                    "While(True,[Assign(a, 1),Assign(x, Star(y, 2))])"
                 )
             }
             Err(msg) => assert!(false, "parse while err:{}", msg),
@@ -901,7 +899,7 @@ mod tests {
             Ok(stmts) => {
                 assert_eq!(
                     to_string(&stmts),
-                    "Block(Var(a,1),If(DoubleEqual(x, 3),Assign(x, Star(y, 2))),Return(x))"
+                    "Block(Var(a,1),If(DoubleEqual(x, 3),[Assign(x, Star(y, 2))]),Return(x))"
                 )
             }
             Err(msg) => assert!(false, "parse while err:{}", msg),
@@ -914,7 +912,7 @@ mod tests {
         match Parser::parse(s) {
             Ok(stmts) => {
                 assert_eq!(to_string(&stmts),
-                           "For([Var(x,0),LessEqual(x, 10),Assign(x, Plus(x, 1))],Block(Assign(y, Minus(y, 2))))")
+                           "For(<Var(x,0),LessEqual(x, 10),Assign(x, Plus(x, 1))>,[Assign(y, Minus(y, 2))])")
             }
             Err(msg) => assert!(false, "parse while err:{}", msg),
         }
@@ -925,7 +923,7 @@ mod tests {
         let s = "fun multiply(x,y) { x*y }";
         match Parser::parse(s) {
             Ok(stmts) => {
-                assert_eq!(to_string(&stmts), "Func(multiply,<x,y>,[Star(x, y)])")
+                assert_eq!(to_string(&stmts), "Fun(multiply,<x,y>,[Star(x, y)])")
             }
             Err(msg) => assert!(false, "parse fun err:{}", msg),
         }
@@ -938,7 +936,7 @@ mod tests {
             Ok(stmts) => {
                 assert_eq!(
                     to_string(&stmts),
-                    "Class(Test,{set => <x>,[Assign(Get(This, x), Get(Super, x)),Return(This)]})"
+                    "Class(Test,{Fun(set,<x>,[Assign(Get(This, x), Get(Super, x)),Return(This)])})"
                 )
             }
             Err(msg) => assert!(false, "parse class err:{}", msg),
