@@ -619,7 +619,6 @@ impl<'a> ParseState<'a> {
                 if self.matches_identifier() {
                     let right = expr::single(self.prev().unwrap().clone());
                     epx = expr::binary(dot, epx, right);
-                    println!("{epx}");
                 } else {
                     return Err(format!(
                         "expect identifier, got {:?}",
