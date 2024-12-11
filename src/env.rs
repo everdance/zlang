@@ -1,4 +1,5 @@
 use crate::expr;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -10,7 +11,7 @@ pub enum Value {
     Bool(bool),
     Fun(Rc<expr::Fun>),
     Class(Rc<HashMap<String, expr::Fun>>),
-    Object(String, Rc<HashMap<String, Value>>),
+    Object(String, Rc<RefCell<HashMap<String, Value>>>),
 }
 
 pub struct Environments {
