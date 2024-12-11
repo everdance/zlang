@@ -9,8 +9,8 @@ pub enum Value {
     Str(String),
     Num(f64),
     Bool(bool),
-    Fun(Rc<expr::Fun>),
-    Class(Rc<HashMap<String, expr::Fun>>),
+    Fun(expr::Fun),
+    Class(HashMap<String, expr::Fun>),
     Object(String, Rc<RefCell<HashMap<String, Value>>>),
 }
 

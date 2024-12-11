@@ -2,7 +2,7 @@ use crate::token::{Kind, Token};
 use core::fmt;
 use std::collections::HashMap;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ExprType {
     Literal,
     Identifier,
@@ -17,7 +17,7 @@ pub enum ExprType {
     Super,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Expr {
     pub kind: ExprType,
     pub token: Token,
@@ -142,7 +142,7 @@ pub fn list(t: Token, left: Expr, list: Vec<Expr>) -> Expr {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct For {
     pub var: Option<Box<Stmt>>,
     pub cond: Option<Box<Stmt>>,
@@ -166,7 +166,7 @@ impl fmt::Display for For {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Fun {
     pub name: Token,
     pub params: Vec<Token>,
@@ -193,7 +193,7 @@ impl fmt::Display for Fun {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Class {
     pub name: Token,
     pub methods: HashMap<String, Fun>,
@@ -210,7 +210,7 @@ impl fmt::Display for Class {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Stmt {
     Expr(Expr),
     Var(Token, Option<Expr>),

@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::env::{self, Environments, Value};
 use crate::expr;
 use crate::expr::{
@@ -8,39 +6,34 @@ use crate::expr::{
     Stmt,
 };
 use crate::token::Kind;
+use std::collections::HashMap;
 
 pub struct Eval;
 
 impl Eval {
     pub fn exec(stmts: &[Stmt]) -> () {
-        let mut eval = Evaluator { envs: env::new() };
+        let mut eval = Evaluator {
+            envs: env::new(),
+            context: Context::None,
+        };
         for stmt in stmts.iter() {
             eval.stmt(stmt);
         }
     }
 }
 
+#[derive(PartialEq)]
+enum Context {
+    None,
+    Func,
+}
+
 struct Evaluator {
     envs: Environments,
+    context: Context,
 }
 
 impl Evaluator {
-    fn pop(&mut self) {
-        self.envs.pop();
-    }
-
-    fn new_env(&mut self, ev: Option<HashMap<String, Value>>) {
-        return self.envs.push(ev);
-    }
-
-    fn set_val(&mut self, id: String, val: Value) {
-        self.envs.set(id, val);
-    }
-
-    fn get_val(&mut self, id: &str) -> Option<&Value> {
-        self.envs.get(id)
-    }
-
     fn stmt(&mut self, stmt: &expr::Stmt) -> Value {
         match stmt {
             Stmt::Expr(exp) => self.expr(exp),
@@ -49,10 +42,16 @@ impl Evaluator {
                     Some(epr) => self.expr(epr),
                     _ => Value::Nil,
                 };
-                self.set_val(name.val(), val);
+                self.envs.set(name.val(), val);
                 Value::Nil
             }
-            Stmt::Return(epr) => Value::Nil, //TODO
+            Stmt::Return(epx) => {
+                if self.context != Context::Func {
+                    panic!("unexpected return stmt");
+                }
+                // TODO jump out of function
+                self.expr(epx)
+            }
             Stmt::If(cond, ifstmt, elsest) => match self.expr(cond) {
                 Value::Bool(true) => {
                     for st in ifstmt.iter() {
@@ -105,8 +104,16 @@ impl Evaluator {
                 }
                 Value::Nil
             }
-            Stmt::Fun(fun) => Value::Nil,
-            Stmt::Class(cls) => Value::Nil,
+            Stmt::Fun(fun) => {
+                let copy = fun.clone();
+                self.envs.set(copy.name.val(), Value::Fun(copy));
+                Value::Nil
+            }
+            Stmt::Class(cls) => {
+                let copy = cls.clone();
+                self.envs.set(copy.name.val(), Value::Class(copy.methods));
+                Value::Nil
+            }
         }
     }
 
@@ -121,7 +128,7 @@ impl Evaluator {
                 _ => unreachable!(),
             },
             Identifier => {
-                if let Some(val) = self.get_val(&exp.token.val()) {
+                if let Some(val) = self.envs.get(&exp.token.val()) {
                     val.clone()
                 } else {
                     panic!("undefined variable")
@@ -175,9 +182,8 @@ impl Evaluator {
     }
 
     fn call(&mut self, callee: &Expr, params: &[Expr]) -> Value {
-        // find func definition
         let method = match callee.kind {
-            ExprType::Identifier => self.get_val(&callee.token.val()).unwrap().clone(),
+            ExprType::Identifier => self.envs.get(&callee.token.val()).unwrap().clone(),
             ExprType::Get => self.get(callee),
 
             _ => unreachable!(),
@@ -188,11 +194,14 @@ impl Evaluator {
             for (index, param) in fun.params.iter().enumerate() {
                 closure.insert(param.val(), self.expr(params.get(index).unwrap()));
             }
-            self.new_env(Some(closure));
+            self.envs.push(Some(closure));
 
+            self.context = Context::Func;
             for stmt in fun.body.iter() {
+                // TODO break on return
                 self.stmt(stmt);
             }
+            self.envs.pop();
         } else {
             panic!("unexpected value for function:{:?}", method)
         }
@@ -200,10 +209,35 @@ impl Evaluator {
     }
 
     fn get(&mut self, exp: &Expr) -> Value {
-        Value::Nil
+        let left = self.expr(exp.left.as_deref().unwrap());
+        let right = exp.right.as_deref().unwrap();
+        assert!(right.kind == ExprType::Identifier);
+        match left {
+            Value::Object(_, map) => {
+                let key = right.token.val();
+                map.borrow().get(&key).unwrap().clone()
+            }
+            _ => panic!("unexpected value for get:{:?}", left),
+        }
     }
 
     fn assign(&mut self, exp: &Expr) -> Value {
+        let left = exp.left.as_deref().unwrap();
+        let val = self.expr(exp.right.as_deref().unwrap()).clone();
+        match left.kind {
+            Identifier => self.envs.set(left.token.val(), val),
+            Get => {
+                let obj = self.get(left.left.as_deref().unwrap());
+                match obj {
+                    Value::Object(_, map) => {
+                        let key = left.right.as_deref().unwrap().token.val();
+                        map.borrow_mut().insert(key, val);
+                    }
+                    _ => panic!("unexpected value type for set:{:?}", obj),
+                }
+            }
+            _ => panic!("unexpected left operand for set:{:?}", left),
+        };
         Value::Nil
     }
 }
