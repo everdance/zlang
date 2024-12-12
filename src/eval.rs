@@ -14,7 +14,7 @@ impl Eval {
     pub fn exec(stmts: &[Stmt]) -> () {
         let mut eval = Evaluator {
             envs: env::new(),
-            context: Context::None,
+            func_stack: vec![],
         };
         for stmt in stmts.iter() {
             eval.stmt(stmt);
@@ -22,18 +22,22 @@ impl Eval {
     }
 }
 
-#[derive(PartialEq)]
-enum Context {
-    None,
-    Func,
-}
-
 struct Evaluator {
     envs: Environments,
-    context: Context,
+    func_stack: Vec<bool>,
 }
 
 impl Evaluator {
+    fn enter_func(&mut self, closure: HashMap<String, Value>) {
+        self.envs.push(Some(closure));
+        self.func_stack.push(false);
+    }
+
+    fn exit_func(&mut self) {
+        self.envs.pop();
+        self.func_stack.pop();
+    }
+
     fn stmt(&mut self, stmt: &expr::Stmt) -> Value {
         match stmt {
             Stmt::Expr(exp) => self.expr(exp),
@@ -46,10 +50,11 @@ impl Evaluator {
                 Value::Nil
             }
             Stmt::Return(epx) => {
-                if self.context != Context::Func {
-                    panic!("unexpected return stmt");
+                // TODO: should move this to parser
+                if self.func_stack.len() == 0 {
+                    panic!("unexpected return stmt without function");
                 }
-                // TODO jump out of function
+                *self.func_stack.last_mut().unwrap() = true;
                 self.expr(epx)
             }
             Stmt::If(cond, ifstmt, elsest) => match self.expr(cond) {
@@ -194,18 +199,21 @@ impl Evaluator {
             for (index, param) in fun.params.iter().enumerate() {
                 closure.insert(param.val(), self.expr(params.get(index).unwrap()));
             }
-            self.envs.push(Some(closure));
+            self.enter_func(closure);
 
-            self.context = Context::Func;
+            let mut result = Value::Nil;
             for stmt in fun.body.iter() {
-                // TODO break on return
-                self.stmt(stmt);
+                if *self.func_stack.last().unwrap() {
+                    break;
+                }
+                result = self.stmt(stmt);
             }
-            self.envs.pop();
+            self.exit_func();
+
+            result
         } else {
             panic!("unexpected value for function:{:?}", method)
         }
-        Value::Nil
     }
 
     fn get(&mut self, exp: &Expr) -> Value {
