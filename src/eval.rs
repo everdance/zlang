@@ -20,6 +20,7 @@ impl Eval {
         };
         let mut ret = Value::Nil;
         for stmt in stmts.iter() {
+            println!("{stmt}");
             ret = eval.stmt(stmt);
         }
 
@@ -199,6 +200,7 @@ impl Evaluator {
                     (x, y) => panic!("unmatched operand for {}:{x}, {y}", exp.token.kind),
                 }
             }
+            This => self.envs.get("this").unwrap().clone(),
             Grouping => self.expr(exp.left.as_deref().unwrap()),
             Call => self.call(exp.left.as_deref().unwrap(), exp.list.as_ref().unwrap()),
             Assign => self.assign(exp),
@@ -208,9 +210,22 @@ impl Evaluator {
     }
 
     fn call(&mut self, callee: &Expr, params: &[Expr]) -> Value {
+        let mut object = Value::Nil;
         let method = match callee.kind {
             ExprType::Identifier => self.envs.get(&callee.token.val()).unwrap().clone(),
-            ExprType::Get => self.get(callee),
+            ExprType::Get => {
+                let method_name = callee.right.as_deref().unwrap().token.val();
+                object = self.expr(callee.left.as_deref().unwrap());
+                match &object {
+                    Value::Object(cls, _) => match self.envs.get(&cls) {
+                        Some(Value::Class(cls_obj)) => {
+                            Value::Fun(cls_obj.get(&method_name).unwrap().clone())
+                        }
+                        val => panic!("unexpected class reference:{:?}", val),
+                    },
+                    obj => panic!("cannot call method on non-object entity:{:?}", obj),
+                }
+            }
 
             _ => unreachable!(),
         };
@@ -219,6 +234,9 @@ impl Evaluator {
             let mut closure = HashMap::new();
             for (index, param) in fun.params.iter().enumerate() {
                 closure.insert(param.val(), self.expr(params.get(index).unwrap()));
+            }
+            if let Value::Object(_, _) = &object {
+                closure.insert("this".to_string(), object);
             }
             self.enter_func(closure);
 
@@ -256,9 +274,10 @@ impl Evaluator {
         let left = exp.left.as_deref().unwrap();
         let val = self.expr(exp.right.as_deref().unwrap()).clone();
         match left.kind {
+            // TODO: check if var is predefined
             Identifier => self.envs.set(left.token.val(), val),
             Get => {
-                let obj = self.get(left.left.as_deref().unwrap());
+                let obj = self.expr(left.left.as_deref().unwrap());
                 match obj {
                     Value::Object(_, map) => {
                         let key = left.right.as_deref().unwrap().token.val();
@@ -318,5 +337,12 @@ mod tests {
         let s = "var x = 3; fun multiply(x, y) {return x*y;}; print multiply(x,5)";
         let stmts = Parser::parse(s).unwrap();
         assert_eq!(Eval::exec(&stmts).to_string(), "15");
+    }
+
+    #[test]
+    fn class_expr() {
+        let s = "class Math { fun multiply(x) {return this.val*x;}}; var x = Math(); x.val = 2; print x.multiply(4);";
+        let stmts = Parser::parse(s).unwrap();
+        assert_eq!(Eval::exec(&stmts).to_string(), "8");
     }
 }
