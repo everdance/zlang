@@ -6,19 +6,24 @@ use crate::expr::{
     Stmt,
 };
 use crate::token::Kind;
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 pub struct Eval;
 
 impl Eval {
-    pub fn exec(stmts: &[Stmt]) -> () {
+    pub fn exec(stmts: &[Stmt]) -> Value {
         let mut eval = Evaluator {
             envs: env::new(),
             func_stack: vec![],
         };
+        let mut ret = Value::Nil;
         for stmt in stmts.iter() {
-            eval.stmt(stmt);
+            ret = eval.stmt(stmt);
         }
+
+        ret
     }
 }
 
@@ -120,8 +125,9 @@ impl Evaluator {
                 Value::Nil
             }
             Stmt::Print(exp) => {
-                println!("{}", self.expr(exp));
-                Value::Nil
+                let val = self.expr(exp);
+                println!("{val}");
+                val
             }
         }
     }
@@ -170,16 +176,23 @@ impl Evaluator {
                 let left = self.expr(exp.left.as_deref().unwrap());
                 let right = self.expr(exp.right.as_deref().unwrap());
                 match (left, right) {
-                    (Value::Bool(x), Value::Bool(y)) => {
-                        if exp.token.kind == Kind::Or {
-                            Value::Bool(x || y)
-                        } else if exp.token.kind == Kind::And {
-                            Value::Bool(x && y)
-                        } else {
-                            panic!("unexpected logic token")
-                        }
-                    }
-                    (_, _) => panic!("unexpected value for logic"),
+                    (Value::Bool(x), Value::Bool(y)) => match exp.token.kind {
+                        Kind::Or => Value::Bool(x || y),
+                        Kind::And => Value::Bool(x && y),
+                        Kind::BangEqual => Value::Bool(x != y),
+                        Kind::DoubleEqual => Value::Bool(x == y),
+                        _ => panic!("unexpected operator for bool:{}", exp.token.kind),
+                    },
+                    (Value::Num(x), Value::Num(y)) => match exp.token.kind {
+                        Kind::DoubleEqual => Value::Bool(x == y),
+                        Kind::BangEqual => Value::Bool(x != y),
+                        Kind::Greater => Value::Bool(x > y),
+                        Kind::GreaterEqual => Value::Bool(x >= y),
+                        Kind::Less => Value::Bool(x < y),
+                        Kind::LessEqual => Value::Bool(x <= y),
+                        _ => panic!("unexpected operator for number:{}", exp.token.kind),
+                    },
+                    (x, y) => panic!("unmatched operand for {}:{x}, {y}", exp.token.kind),
                 }
             }
             Grouping => self.expr(exp.left.as_deref().unwrap()),
@@ -215,6 +228,8 @@ impl Evaluator {
             self.exit_func();
 
             result
+        } else if let Value::Class(_) = method {
+            Value::Object(callee.token.val(), Rc::new(RefCell::new(HashMap::new())))
         } else {
             panic!("unexpected value for function:{:?}", method)
         }
@@ -251,5 +266,22 @@ impl Evaluator {
             _ => panic!("unexpected left operand for set:{:?}", left),
         };
         Value::Nil
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parse::Parser;
+
+    #[test]
+    fn expr() {
+        let s = "print 1 == 1 and true != false;";
+        match Parser::parse(s) {
+            Ok(stmts) => {
+                assert_eq!(format!("{}", Eval::exec(&stmts)), "true")
+            }
+            Err(msg) => assert!(false, "parse expr err:{}", msg),
+        }
     }
 }

@@ -8,10 +8,12 @@ use eval::Eval;
 use parse::Parser;
 
 fn main() {
-    let s = "var x = 1; print x";
+    let s = "var x = 1 + 2; print x";
 
     match Parser::parse(s) {
-        Ok(stmts) => Eval::exec(&stmts),
+        Ok(stmts) => {
+            Eval::exec(&stmts);
+        }
         Err(e) => println!("{}", e),
     };
 }
