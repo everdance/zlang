@@ -277,11 +277,14 @@ mod tests {
     #[test]
     fn expr() {
         let s = "print 1 == 1 and true != false;";
-        match Parser::parse(s) {
-            Ok(stmts) => {
-                assert_eq!(format!("{}", Eval::exec(&stmts)), "true")
-            }
-            Err(msg) => assert!(false, "parse expr err:{}", msg),
-        }
+        let stmts = Parser::parse(s).unwrap();
+        assert_eq!(Eval::exec(&stmts).to_string(), "true");
+    }
+
+    #[test]
+    fn var() {
+        let s = "var x = 3 /2 + 1 * 9.0; print x";
+        let stmts = Parser::parse(s).unwrap();
+        assert_eq!(Eval::exec(&stmts).to_string(), "true");
     }
 }
