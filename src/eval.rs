@@ -95,15 +95,21 @@ impl Evaluator {
                 if let Some(st) = &stmt.var {
                     self.stmt(st);
                 }
+
                 loop {
                     if let Some(cond) = &stmt.cond {
                         match self.stmt(cond) {
                             Value::Bool(true) => (),
                             _ => break,
-                        }
+                        };
                     }
+
                     for stmt in stmt.body.iter() {
                         self.stmt(stmt);
+                    }
+
+                    if let Some(incr) = &stmt.incr {
+                        self.stmt(incr);
                     }
                 }
                 Value::Nil
@@ -285,6 +291,20 @@ mod tests {
     fn var() {
         let s = "var x = 3 /2 + 1 * 9.0; print x";
         let stmts = Parser::parse(s).unwrap();
-        assert_eq!(Eval::exec(&stmts).to_string(), "true");
+        assert_eq!(Eval::exec(&stmts).to_string(), "10.5");
+    }
+
+    #[test]
+    fn if_else() {
+        let s = "var x = 0; if (6 >= 5) {x = 5} else x = 3; print x";
+        let stmts = Parser::parse(s).unwrap();
+        assert_eq!(Eval::exec(&stmts).to_string(), "5");
+    }
+
+    #[test]
+    fn for_expr() {
+        let s = "var x = 0; for(var i = 0; i < 10; i = i+1) x = x+1; print x";
+        let stmts = Parser::parse(s).unwrap();
+        assert_eq!(Eval::exec(&stmts).to_string(), "10");
     }
 }

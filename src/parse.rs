@@ -829,10 +829,10 @@ mod tests {
 
     #[test]
     fn var_def_with_assign() {
-        let s = "var x = 1;";
+        let s = "var x = 1; x = x+1";
         match Parser::parse(s) {
             Ok(stmts) => {
-                assert_eq!(to_string(&stmts), "Var(x,1)")
+                assert_eq!(to_string(&stmts), "Var(x,1),Assign(x, Plus(x, 1))")
             }
             Err(msg) => assert!(false, "parse var err:{}", msg),
         }
@@ -914,7 +914,7 @@ mod tests {
 
     #[test]
     fn for_def() {
-        let s = "for (var x = 0; x <= 10; x = x + 1) { y = y - 2;}";
+        let s = "for (var x = 0; x <= 10; x = x + 1) y = y - 2;";
         match Parser::parse(s) {
             Ok(stmts) => {
                 assert_eq!(to_string(&stmts),
