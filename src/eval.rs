@@ -119,6 +119,10 @@ impl Evaluator {
                 self.envs.set(copy.name.val(), Value::Class(copy.methods));
                 Value::Nil
             }
+            Stmt::Print(exp) => {
+                println!("{}", self.expr(exp));
+                Value::Nil
+            }
         }
     }
 

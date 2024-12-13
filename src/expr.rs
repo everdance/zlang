@@ -215,6 +215,7 @@ pub enum Stmt {
     Expr(Expr),
     Var(Token, Option<Expr>),
     Return(Expr),
+    Print(Expr),
     If(Expr, Vec<Stmt>, Option<Vec<Stmt>>),
     Block(Vec<Stmt>),
     While(Expr, Vec<Stmt>),
@@ -235,6 +236,7 @@ impl fmt::Display for Stmt {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Stmt::Expr(expr) => write!(f, "{}", expr),
+            Stmt::Print(expr) => write!(f, "Print({})", expr),
             Stmt::Var(t, None) => write!(f, "Var({})", t.val()),
             Stmt::Return(expr) => write!(f, "Return({})", expr),
             Stmt::Var(t, Some(expr)) => write!(f, "Var({},{})", t.val(), expr),

@@ -206,6 +206,8 @@ impl<'a> ParseState<'a> {
             return self.retstmt();
         } else if self.matches(Kind::Var) {
             return self.var();
+        } else if self.matches(Kind::Print) {
+            return self.printstmt();
         } else {
             return self.exprstmt();
         }
@@ -401,6 +403,14 @@ impl<'a> ParseState<'a> {
         let token = self.prev().unwrap().clone();
         match self.expr() {
             Ok(expr) => Ok(Stmt::Return(expr)),
+            Err(msg) => Err(format!("{} at {:?}", msg, token)),
+        }
+    }
+
+    fn printstmt(&mut self) -> Result<Stmt, String> {
+        let token = self.prev().unwrap().clone();
+        match self.expr() {
+            Ok(expr) => Ok(Stmt::Print(expr)),
             Err(msg) => Err(format!("{} at {:?}", msg, token)),
         }
     }
@@ -669,9 +679,8 @@ impl<'a> ParseState<'a> {
         self.next();
 
         match token.kind {
-            Identifier(_) | StrLiteral(_) | NumLiteral(_) | This | Super | True | False | Nil => {
-                Ok(expr::single(token))
-            }
+            Identifier(_) | StrLiteral(_) | NumLiteral(_) | This | Super | Print | True | False
+            | Nil => Ok(expr::single(token)),
 
             LeftParen => match self.expr() {
                 Ok(sub) => {
@@ -809,10 +818,10 @@ mod tests {
 
     #[test]
     fn var_def() {
-        let s = "var x;";
+        let s = "var x; print x";
         match Parser::parse(s) {
             Ok(stmts) => {
-                assert_eq!(to_string(&stmts), "Var(x)")
+                assert_eq!(to_string(&stmts), "Var(x),Print(x)")
             }
             Err(msg) => assert!(false, "parse var err:{}", msg),
         }

@@ -65,6 +65,7 @@ pub enum Kind {
     True,
     Var,
     While,
+    Print,
 
     Comment,
 }
