@@ -103,11 +103,9 @@ impl Evaluator {
                             _ => break,
                         };
                     }
-
                     for stmt in stmt.body.iter() {
                         self.stmt(stmt);
                     }
-
                     if let Some(incr) = &stmt.incr {
                         self.stmt(incr);
                     }
@@ -306,5 +304,19 @@ mod tests {
         let s = "var x = 0; for(var i = 0; i < 10; i = i+1) x = x+1; print x";
         let stmts = Parser::parse(s).unwrap();
         assert_eq!(Eval::exec(&stmts).to_string(), "10");
+    }
+
+    #[test]
+    fn while_expr() {
+        let s = "var x = 1; while(x < 100) x = x*2; print x";
+        let stmts = Parser::parse(s).unwrap();
+        assert_eq!(Eval::exec(&stmts).to_string(), "128");
+    }
+
+    #[test]
+    fn func_expr() {
+        let s = "var x = 3; fun multiply(x, y) {return x*y;}; print multiply(x,5)";
+        let stmts = Parser::parse(s).unwrap();
+        assert_eq!(Eval::exec(&stmts).to_string(), "15");
     }
 }

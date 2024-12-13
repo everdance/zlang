@@ -659,7 +659,10 @@ impl<'a> ParseState<'a> {
             if self.matches(Comma) {
                 continue;
             }
-            break;
+
+            if self.matches(RightParen) {
+                break;
+            }
         }
 
         Ok(expr::list(t, callee, args))
@@ -937,10 +940,13 @@ mod tests {
 
     #[test]
     fn fun_def() {
-        let s = "fun multiply(x,y) { x*y }";
+        let s = "fun multiply(x,y) { return x*y }; multiply(3*5)";
         match Parser::parse(s) {
             Ok(stmts) => {
-                assert_eq!(to_string(&stmts), "Fun(multiply,<x,y>,[Star(x, y)])")
+                assert_eq!(
+                    to_string(&stmts),
+                    "Fun(multiply,<x,y>,[Return(Star(x, y))]),Call(multiply, [Star(3, 5)])"
+                )
             }
             Err(msg) => assert!(false, "parse fun err:{}", msg),
         }
