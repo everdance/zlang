@@ -83,17 +83,32 @@ impl Environments {
     }
 }
 
-pub struct Eval;
+pub trait Exec {
+    fn exec(&mut self, stmts: &[Stmt]) -> Value;
+}
 
-impl Eval {
-    pub fn exec(stmts: &[Stmt]) -> Value {
-        let mut eval = Evaluator {
-            envs: new_env(),
-            fstack: vec![],
-            printval: None,
-        };
-        stmts.iter().for_each(|st| eval.stmt(st));
-        eval.print_val().unwrap_or(Value::Nil)
+pub fn evaluate(stmts: &[Stmt]) -> Value {
+    let mut eval = Evaluator {
+        envs: new_env(),
+        fstack: vec![],
+        printval: None,
+    };
+    stmts.iter().for_each(|st| eval.stmt(st));
+    eval.print_val().unwrap_or(Value::Nil)
+}
+
+pub fn evaluator() -> Box<dyn Exec> {
+    Box::new(Evaluator {
+        envs: new_env(),
+        fstack: vec![],
+        printval: None,
+    })
+}
+
+impl Exec for Evaluator {
+    fn exec(&mut self, stmts: &[Stmt]) -> Value {
+        stmts.iter().for_each(|st| self.stmt(st));
+        self.print_val().unwrap_or(Value::Nil)
     }
 }
 
@@ -353,48 +368,48 @@ mod tests {
     fn expr() {
         let s = "print 1 == 1 and true != false;";
         let stmts = Parser::parse(s).unwrap();
-        assert_eq!(Eval::exec(&stmts).to_string(), "true");
+        assert_eq!(evaluate(&stmts).to_string(), "true");
     }
 
     #[test]
     fn var() {
         let s = "var x = 3 /2 + 1 * 9.0; print x";
         let stmts = Parser::parse(s).unwrap();
-        assert_eq!(Eval::exec(&stmts).to_string(), "10.5");
+        assert_eq!(evaluate(&stmts).to_string(), "10.5");
     }
 
     #[test]
     fn if_else() {
         let s = "var x = 0; if (6 >= 5) {x = 5} else x = 3; print x";
         let stmts = Parser::parse(s).unwrap();
-        assert_eq!(Eval::exec(&stmts).to_string(), "5");
+        assert_eq!(evaluate(&stmts).to_string(), "5");
     }
 
     #[test]
     fn for_expr() {
         let s = "var x = 0; for(var i = 0; i < 10; i = i+1) x = x+1; print x";
         let stmts = Parser::parse(s).unwrap();
-        assert_eq!(Eval::exec(&stmts).to_string(), "10");
+        assert_eq!(evaluate(&stmts).to_string(), "10");
     }
 
     #[test]
     fn while_expr() {
         let s = "var x = 1; while(x < 100) x = x*2; print x";
         let stmts = Parser::parse(s).unwrap();
-        assert_eq!(Eval::exec(&stmts).to_string(), "128");
+        assert_eq!(evaluate(&stmts).to_string(), "128");
     }
 
     #[test]
     fn func_expr() {
         let s = "var x = 3; fun multiply(x, y) {return x*y;}; print multiply(x,5)";
         let stmts = Parser::parse(s).unwrap();
-        assert_eq!(Eval::exec(&stmts).to_string(), "15");
+        assert_eq!(evaluate(&stmts).to_string(), "15");
     }
 
     #[test]
     fn class_expr() {
         let s = "class Math { fun multiply(x) {return this.val*x;}}; var x = Math(); x.val = 2; print x.multiply(4);";
         let stmts = Parser::parse(s).unwrap();
-        assert_eq!(Eval::exec(&stmts).to_string(), "8");
+        assert_eq!(evaluate(&stmts).to_string(), "8");
     }
 }
