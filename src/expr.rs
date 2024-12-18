@@ -145,14 +145,14 @@ pub fn list(t: Token, left: Expr, list: Vec<Expr>) -> Expr {
 #[derive(Debug, Clone)]
 pub struct For {
     pub var: Option<Box<Stmt>>,
-    pub cond: Option<Box<Stmt>>,
+    pub cond: Option<Box<Expr>>,
     pub incr: Option<Box<Stmt>>,
     pub body: Vec<Stmt>,
 }
 
 impl fmt::Display for For {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let param = [&self.var, &self.cond, &self.incr]
+        let param = [&self.var, &self.incr]
             .iter()
             .map(|e| match e {
                 Some(exp) => format!("{exp},"),
@@ -162,7 +162,11 @@ impl fmt::Display for For {
             .trim_end_matches(",")
             .to_string();
 
-        write!(f, "For(<{param}>,[{}])", to_string(&self.body))
+        let cond = match &self.cond {
+            Some(exp) => exp.to_string(),
+            _ => "".to_string(),
+        };
+        write!(f, "For(<{param}:{}>,[{}])", cond, to_string(&self.body))
     }
 }
 

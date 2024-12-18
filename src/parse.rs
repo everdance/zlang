@@ -243,14 +243,14 @@ impl<'a> ParseState<'a> {
             match self.exprstmt() {
                 Ok(epx) => {
                     match &epx {
-                        Stmt::Expr(cond) => {
-                            if !cond.is_logic() {
-                                return Err(format!("expect logic expression, got {}", cond));
+                        Stmt::Expr(condition) => {
+                            if !condition.is_logic() {
+                                return Err(format!("expect logic expression, got {}", condition));
                             }
+                            cond = Some(Box::new(condition.clone()));
                         }
                         _ => unreachable!(),
                     };
-                    cond = Some(Box::new(epx));
                 }
                 Err(msg) => return Err(msg),
             };
@@ -921,7 +921,7 @@ mod tests {
         match Parser::parse(s) {
             Ok(stmts) => {
                 assert_eq!(to_string(&stmts),
-                           "For(<Var(x,0),LessEqual(x, 10),Assign(x, Plus(x, 1))>,[Assign(y, Minus(y, 2))])")
+                           "For(<Var(x,0),Assign(x, Plus(x, 1)):LessEqual(x, 10)>,[Assign(y, Minus(y, 2))])")
             }
             Err(msg) => assert!(false, "parse while err:{}", msg),
         }
@@ -932,7 +932,7 @@ mod tests {
         let s = "for (;;) {}";
         match Parser::parse(s) {
             Ok(stmts) => {
-                assert_eq!(to_string(&stmts), "For(<>,[])")
+                assert_eq!(to_string(&stmts), "For(<:>,[])")
             }
             Err(msg) => assert!(false, "parse for err:{}", msg),
         }

@@ -16,59 +16,70 @@ impl Eval {
     pub fn exec(stmts: &[Stmt]) -> Value {
         let mut eval = Evaluator {
             envs: env::new(),
-            func_stack: vec![],
+            fstack: vec![],
+            printval: None,
         };
-        let mut ret = Value::Nil;
-        for stmt in stmts.iter() {
-            println!("{stmt}");
-            ret = eval.stmt(stmt);
-        }
-
-        ret
+        stmts.iter().for_each(|st| eval.stmt(st));
+        eval.print_val().unwrap_or(Value::Nil)
     }
+}
+
+struct FunStack {
+    returned: bool,
+    val: Value,
 }
 
 struct Evaluator {
     envs: Environments,
-    func_stack: Vec<bool>,
+    fstack: Vec<FunStack>,
+    printval: Option<Value>,
 }
 
 impl Evaluator {
-    fn enter_func(&mut self, closure: HashMap<String, Value>) {
+    fn print_val(&self) -> Option<Value> {
+        self.printval.clone()
+    }
+
+    fn enterfun(&mut self, closure: HashMap<String, Value>) {
         self.envs.push(Some(closure));
-        self.func_stack.push(false);
+        self.fstack.push(FunStack {
+            returned: false,
+            val: Value::Nil,
+        });
     }
 
-    fn exit_func(&mut self) {
+    fn exitfun(&mut self) -> Option<FunStack> {
         self.envs.pop();
-        self.func_stack.pop();
+        self.fstack.pop()
     }
 
-    fn stmt(&mut self, stmt: &expr::Stmt) -> Value {
+    fn stmt(&mut self, stmt: &expr::Stmt) {
         match stmt {
-            Stmt::Expr(exp) => self.expr(exp),
+            Stmt::Expr(exp) => {
+                self.expr(exp);
+            }
             Stmt::Var(name, exp) => {
                 let val = match exp {
                     Some(epr) => self.expr(epr),
                     _ => Value::Nil,
                 };
                 self.envs.set(name.val(), val);
-                Value::Nil
             }
             Stmt::Return(epx) => {
                 // TODO: should move this to parser
-                if self.func_stack.len() == 0 {
+                if self.fstack.len() == 0 {
                     panic!("unexpected return stmt without function");
                 }
-                *self.func_stack.last_mut().unwrap() = true;
-                self.expr(epx)
+                *self.fstack.last_mut().unwrap() = FunStack {
+                    returned: true,
+                    val: self.expr(epx),
+                };
             }
             Stmt::If(cond, ifstmt, elsest) => match self.expr(cond) {
                 Value::Bool(true) => {
                     for st in ifstmt.iter() {
                         self.stmt(st);
                     }
-                    Value::Nil
                 }
                 Value::Bool(false) => {
                     if let Some(stmts) = elsest {
@@ -76,22 +87,16 @@ impl Evaluator {
                             self.stmt(st);
                         }
                     }
-                    Value::Nil
                 }
                 _ => unreachable!(),
             },
-            Stmt::While(cond, stmts) => {
-                loop {
-                    match self.expr(cond) {
-                        Value::Bool(true) => (),
-                        _ => break,
-                    }
-                    for stmt in stmts.iter() {
-                        self.stmt(stmt);
-                    }
+            Stmt::While(cond, stmts) => loop {
+                match self.expr(cond) {
+                    Value::Bool(true) => (),
+                    _ => break,
                 }
-                Value::Nil
-            }
+                stmts.iter().for_each(|st| self.stmt(st));
+            },
             Stmt::For(stmt) => {
                 if let Some(st) = &stmt.var {
                     self.stmt(st);
@@ -99,40 +104,30 @@ impl Evaluator {
 
                 loop {
                     if let Some(cond) = &stmt.cond {
-                        match self.stmt(cond) {
+                        match self.expr(cond) {
                             Value::Bool(true) => (),
                             _ => break,
                         };
                     }
-                    for stmt in stmt.body.iter() {
-                        self.stmt(stmt);
-                    }
+                    stmt.body.iter().for_each(|st| self.stmt(st));
                     if let Some(incr) = &stmt.incr {
                         self.stmt(incr);
                     }
                 }
-                Value::Nil
             }
-            Stmt::Block(stmts) => {
-                for stmt in stmts.iter() {
-                    self.stmt(stmt);
-                }
-                Value::Nil
-            }
+            Stmt::Block(stmts) => stmts.iter().for_each(|st| self.stmt(st)),
             Stmt::Fun(fun) => {
                 let copy = fun.clone();
                 self.envs.set(copy.name.val(), Value::Fun(copy));
-                Value::Nil
             }
             Stmt::Class(cls) => {
                 let copy = cls.clone();
                 self.envs.set(copy.name.val(), Value::Class(copy.methods));
-                Value::Nil
             }
             Stmt::Print(exp) => {
                 let val = self.expr(exp);
+                self.printval = Some(val.clone());
                 println!("{val}");
-                val
             }
         }
     }
@@ -238,18 +233,15 @@ impl Evaluator {
             if let Value::Object(_, _) = &object {
                 closure.insert("this".to_string(), object);
             }
-            self.enter_func(closure);
+            self.enterfun(closure);
 
-            let mut result = Value::Nil;
             for stmt in fun.body.iter() {
-                if *self.func_stack.last().unwrap() {
+                if self.fstack.last().unwrap().returned {
                     break;
                 }
-                result = self.stmt(stmt);
+                self.stmt(stmt);
             }
-            self.exit_func();
-
-            result
+            self.exitfun().unwrap().val
         } else if let Value::Class(_) = method {
             Value::Object(callee.token.val(), Rc::new(RefCell::new(HashMap::new())))
         } else {
