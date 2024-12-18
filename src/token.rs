@@ -17,7 +17,7 @@ impl Token {
     pub fn val(&self) -> String {
         match self.kind.clone() {
             Kind::Identifier(x) | Kind::StrLiteral(x) => x,
-            Kind::NumLiteral(y) => y.to_string(),
+            Kind::NumLiteral(y) => format!("{y}"),
             _ => "".to_string(),
         }
     }
@@ -65,6 +65,7 @@ pub enum Kind {
     True,
     Var,
     While,
+    Print,
 
     Comment,
 }

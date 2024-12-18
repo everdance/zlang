@@ -1,7 +1,8 @@
 use crate::token::{Kind, Token};
 use core::fmt;
+use std::collections::HashMap;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ExprType {
     Literal,
     Identifier,
@@ -16,7 +17,7 @@ pub enum ExprType {
     Super,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Expr {
     pub kind: ExprType,
     pub token: Token,
@@ -141,17 +142,90 @@ pub fn list(t: Token, left: Expr, list: Vec<Expr>) -> Expr {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone)]
+pub struct For {
+    pub var: Option<Box<Stmt>>,
+    pub cond: Option<Box<Expr>>,
+    pub incr: Option<Box<Stmt>>,
+    pub body: Vec<Stmt>,
+}
+
+impl fmt::Display for For {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let param = [&self.var, &self.incr]
+            .iter()
+            .map(|e| match e {
+                Some(exp) => format!("{exp},"),
+                _ => "".to_string(),
+            })
+            .collect::<String>()
+            .trim_end_matches(",")
+            .to_string();
+
+        let cond = match &self.cond {
+            Some(exp) => exp.to_string(),
+            _ => "".to_string(),
+        };
+        write!(f, "For(<{param}:{}>,[{}])", cond, to_string(&self.body))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Fun {
+    pub name: Token,
+    pub params: Vec<Token>,
+    pub body: Vec<Stmt>,
+}
+
+impl fmt::Display for Fun {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let params = self
+            .params
+            .iter()
+            .map(|x| x.val() + ",")
+            .collect::<String>()
+            .trim_end_matches(",")
+            .to_string();
+
+        write!(
+            f,
+            "Fun({},<{}>,[{}])",
+            self.name.val(),
+            params,
+            to_string(&self.body)
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Class {
+    pub name: Token,
+    pub methods: HashMap<String, Fun>,
+}
+
+impl fmt::Display for Class {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut methods_str = "".to_string();
+        for (_, m) in self.methods.iter() {
+            methods_str = format!("{},{{{m}}}", methods_str.as_str());
+        }
+        methods_str = methods_str.trim_start_matches(",").to_string();
+        write!(f, "Class({},{})", self.name.val(), methods_str.as_str())
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Stmt {
     Expr(Expr),
     Var(Token, Option<Expr>),
-    Return(Token, Expr),
-    If(Expr, Box<Stmt>, Option<Box<Stmt>>),
-    For(Vec<Stmt>, Box<Stmt>),
+    Return(Expr),
+    Print(Expr),
+    If(Expr, Vec<Stmt>, Option<Vec<Stmt>>),
     Block(Vec<Stmt>),
-    While(Expr, Box<Stmt>),
-    Fun(Token, Vec<Token>, Vec<Stmt>),
-    Class(Token, Vec<Stmt>),
+    While(Expr, Vec<Stmt>),
+    For(For),
+    Fun(Fun),
+    Class(Class),
 }
 
 pub fn to_string(list: &Vec<Stmt>) -> String {
@@ -166,27 +240,25 @@ impl fmt::Display for Stmt {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Stmt::Expr(expr) => write!(f, "{}", expr),
+            Stmt::Print(expr) => write!(f, "Print({})", expr),
             Stmt::Var(t, None) => write!(f, "Var({})", t.val()),
-            Stmt::Return(_, expr) => write!(f, "Return({})", expr),
+            Stmt::Return(expr) => write!(f, "Return({})", expr),
             Stmt::Var(t, Some(expr)) => write!(f, "Var({},{})", t.val(), expr),
-            Stmt::If(expr, stmts, None) => write!(f, "If({},{})", expr, stmts),
-            Stmt::If(expr, stmts, Some(elsestmt)) => {
-                write!(f, "If({},{},{})", expr, stmts, elsestmt)
+            Stmt::If(expr, stmts, None) => write!(f, "If({},[{}])", expr, to_string(&stmts)),
+            Stmt::If(expr, stmts, Some(elst)) => {
+                write!(
+                    f,
+                    "If({},[{}],[{}])",
+                    expr,
+                    to_string(&stmts),
+                    to_string(&elst)
+                )
             }
-            Stmt::For(list, stmts) => write!(f, "For([{}],{})", to_string(list), stmts),
             Stmt::Block(list) => write!(f, "Block({})", to_string(list)),
-            Stmt::While(expr, stmts) => write!(f, "While({},{})", expr, stmts),
-            Stmt::Fun(t, tokens, stmts) => {
-                let params = tokens
-                    .iter()
-                    .map(|x| x.val() + ",")
-                    .collect::<String>()
-                    .trim_end_matches(",")
-                    .to_string();
-
-                write!(f, "Func({},<{}>,[{}])", t.val(), params, to_string(stmts))
-            }
-            Stmt::Class(t, stmts) => write!(f, "Class({},[{}])", t.val(), to_string(stmts)),
+            Stmt::While(expr, stmts) => write!(f, "While({},[{}])", expr, to_string(&stmts)),
+            Stmt::For(exp) => write!(f, "{exp}"),
+            Stmt::Fun(func) => write!(f, "{func}"),
+            Stmt::Class(cls) => write!(f, "{cls}"),
         }
     }
 }

@@ -248,6 +248,7 @@ impl ScanState<'_> {
             "this" => This,
             "var" => Var,
             "while" => While,
+            "print" => Print,
             _ => Identifier(word),
         };
 
