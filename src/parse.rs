@@ -275,15 +275,14 @@ impl<'a> ParseState<'a> {
             }
         }
 
-        match self.block_or_expr() {
-            Ok(body) => Ok(Stmt::For(expr::For {
+        self.block_or_expr().map(|body| {
+            Stmt::For(expr::For {
                 var,
                 cond,
                 incr,
                 body,
-            })),
-            Err(msg) => Err(msg),
-        }
+            })
+        })
     }
 
     fn ifelsestmt(&mut self) -> Result<Stmt, String> {
@@ -310,10 +309,7 @@ impl<'a> ParseState<'a> {
                     ));
                 }
 
-                match self.block_or_expr() {
-                    Ok(stmt) => ifstmt = stmt,
-                    Err(msg) => return Err(msg),
-                }
+                ifstmt = self.block_or_expr()?;
             }
             Err(msg) => return Err(msg),
             _ => return Err("unreachable".to_string()),
@@ -324,15 +320,11 @@ impl<'a> ParseState<'a> {
         }
 
         if self.matches(If) {
-            match self.ifelsestmt() {
-                Ok(elsestmt) => Ok(Stmt::If(cond, ifstmt, Some(vec![elsestmt]))),
-                Err(msg) => Err(msg),
-            }
+            self.ifelsestmt()
+                .map(|elsestmt| Stmt::If(cond, ifstmt, Some(vec![elsestmt])))
         } else {
-            match self.block_or_expr() {
-                Ok(elsestmt) => Ok(Stmt::If(cond, ifstmt, Some(elsestmt))),
-                Err(msg) => Err(msg),
-            }
+            self.block_or_expr()
+                .map(|elsestmt| Stmt::If(cond, ifstmt, Some(elsestmt)))
         }
     }
 
@@ -344,8 +336,8 @@ impl<'a> ParseState<'a> {
             ));
         }
 
-        match self.exprstmt() {
-            Ok(Stmt::Expr(cond)) => {
+        match self.exprstmt()? {
+            Stmt::Expr(cond) => {
                 if !cond.is_logic() {
                     return Err(format!("expect logic expression, got {}", cond));
                 }
@@ -357,22 +349,18 @@ impl<'a> ParseState<'a> {
                     ));
                 }
 
-                match self.block_or_expr() {
-                    Ok(stmt) => Ok(Stmt::While(cond, stmt)),
-                    Err(msg) => Err(msg),
-                }
+                self.block_or_expr().map(|stmt| Stmt::While(cond, stmt))
             }
-            Err(msg) => Err(msg),
             _ => Err("unreachable branch".to_string()),
         }
     }
 
     fn block_or_expr(&mut self) -> Result<Vec<Stmt>, String> {
         if self.matches(Kind::LeftBrace) {
-            return self.blockstmt().map(|stmt| match stmt {
+            self.blockstmt().map(|stmt| match stmt {
                 Stmt::Block(v) => v,
                 _ => unreachable!(),
-            });
+            })
         } else {
             self.exprstmt().map(|stmt| vec![stmt])
         }
@@ -390,10 +378,7 @@ impl<'a> ParseState<'a> {
                 continue;
             }
 
-            match self.stmt() {
-                Ok(st) => stmts.push(st),
-                Err(msg) => return Err(msg),
-            }
+            stmts.push(self.stmt()?);
         }
 
         Ok(Stmt::Block(stmts))
@@ -401,25 +386,20 @@ impl<'a> ParseState<'a> {
 
     fn retstmt(&mut self) -> Result<Stmt, String> {
         let token = self.prev().unwrap().clone();
-        match self.expr() {
-            Ok(expr) => Ok(Stmt::Return(expr)),
-            Err(msg) => Err(format!("{} at {:?}", msg, token)),
-        }
+        self.expr()
+            .map(|expr| Stmt::Return(expr))
+            .map_err(|e| format!("{} at {:?}", e, token))
     }
 
     fn printstmt(&mut self) -> Result<Stmt, String> {
         let token = self.prev().unwrap().clone();
-        match self.expr() {
-            Ok(expr) => Ok(Stmt::Print(expr)),
-            Err(msg) => Err(format!("{} at {:?}", msg, token)),
-        }
+        self.expr()
+            .map(|expr| Stmt::Print(expr))
+            .map_err(|e| format!("{} at {:?}", e, token))
     }
 
     fn exprstmt(&mut self) -> Result<Stmt, String> {
-        match self.expr() {
-            Ok(expr) => Ok(Stmt::Expr(expr)),
-            Err(msg) => Err(msg),
-        }
+        self.expr().map(|expr| Stmt::Expr(expr))
     }
 
     //  group 3: fundamental expressions (priority ascending ordered)
@@ -435,32 +415,22 @@ impl<'a> ParseState<'a> {
     //           super, this, identifer, grouping
     //           number, string, bool, nil, etc
     fn expr(&mut self) -> Result<Expr, String> {
-        match self.or() {
-            Ok(left) => {
-                if self.matches(Kind::Equal) {
-                    let eq = self.prev().unwrap().clone();
-                    match self.expr() {
-                        Ok(val) => match left.kind {
-                            ExprType::Identifier | ExprType::Get => Ok(expr::binary(eq, left, val)),
-                            _ => return Err(format!("invalid left hand value {}", left)),
-                        },
-                        Err(e) => return Err(e),
-                    }
-                } else {
-                    Ok(left)
-                }
+        let left = self.or()?;
+        if self.matches(Kind::Equal) {
+            let eq = self.prev().unwrap().clone();
+            let val = self.expr()?;
+            match left.kind {
+                ExprType::Identifier | ExprType::Get => Ok(expr::binary(eq, left, val)),
+                _ => return Err(format!("invalid left hand value {}", left)),
             }
-            Err(e) => Err(e),
+        } else {
+            Ok(left)
         }
     }
 
     fn or(&mut self) -> Result<Expr, String> {
-        let res = self.and();
-        if let Err(msg) = res {
-            return Err(msg);
-        }
+        let mut epx = self.and()?;
 
-        let mut epx = res.unwrap();
         while self.matches(Or) {
             if !epx.is_logic() {
                 return Err(format!(
@@ -469,31 +439,22 @@ impl<'a> ParseState<'a> {
                 ));
             }
 
-            let or = self.prev().unwrap().clone();
-            match self.and() {
-                Ok(right) => {
-                    if !right.is_logic() {
-                        return Err(format!(
-                            "expect logic expression on right operand, got {}",
-                            right
-                        ));
-                    }
-                    epx = expr::binary(or, epx, right);
-                }
-                Err(msg) => return Err(msg),
+            let token = self.prev().unwrap().clone();
+            let right = self.and()?;
+            if !right.is_logic() {
+                return Err(format!(
+                    "expect logic expression on right operand, got {}",
+                    right
+                ));
             }
+            epx = expr::binary(token, epx, right);
         }
 
         Ok(epx)
     }
 
     fn and(&mut self) -> Result<Expr, String> {
-        let res = self.equal();
-        if let Err(msg) = res {
-            return Err(msg);
-        }
-
-        let mut epx = res.unwrap();
+        let mut epx = self.equal()?;
         while self.matches(And) {
             if !epx.is_logic() {
                 return Err(format!(
@@ -502,19 +463,15 @@ impl<'a> ParseState<'a> {
                 ));
             }
 
-            let and = self.prev().unwrap().clone();
-            match self.equal() {
-                Ok(right) => {
-                    if !right.is_logic() {
-                        return Err(format!(
-                            "expect logic expression on right operand, got {}",
-                            right
-                        ));
-                    }
-                    epx = expr::binary(and, epx, right);
-                }
-                Err(msg) => return Err(msg),
+            let token = self.prev().unwrap().clone();
+            let right = self.equal()?;
+            if !right.is_logic() {
+                return Err(format!(
+                    "expect logic expression on right operand, got {}",
+                    right
+                ));
             }
+            epx = expr::binary(token, epx, right);
         }
 
         Ok(epx)
@@ -522,18 +479,10 @@ impl<'a> ParseState<'a> {
 
     // ==
     fn equal(&mut self) -> Result<Expr, String> {
-        let res = self.compare();
-        if let Err(msg) = res {
-            return Err(msg);
-        }
-
-        let mut epx = res.unwrap();
+        let mut epx = self.compare()?;
         while self.matches_any(vec![BangEqual, DoubleEqual]) {
-            let eqx = self.prev().unwrap().clone();
-            match self.compare() {
-                Ok(right) => epx = expr::binary(eqx, epx, right),
-                Err(msg) => return Err(msg),
-            }
+            let token = self.prev().unwrap().clone();
+            epx = expr::binary(token, epx, self.compare()?);
         }
 
         Ok(epx)
@@ -541,18 +490,10 @@ impl<'a> ParseState<'a> {
 
     // >,<,>=,<=
     fn compare(&mut self) -> Result<Expr, String> {
-        let res = self.term();
-        if let Err(msg) = res {
-            return Err(msg);
-        }
-
-        let mut epx = res.unwrap();
+        let mut epx = self.term()?;
         while self.matches_any(vec![Greater, GreaterEqual, Less, LessEqual]) {
-            let t = self.prev().unwrap().clone();
-            match self.term() {
-                Ok(right) => epx = expr::binary(t, epx, right),
-                Err(msg) => return Err(msg),
-            }
+            let token = self.prev().unwrap().clone();
+            epx = expr::binary(token, epx, self.term()?);
         }
 
         Ok(epx)
@@ -560,18 +501,10 @@ impl<'a> ParseState<'a> {
 
     // +,-
     fn term(&mut self) -> Result<Expr, String> {
-        let res = self.factor();
-        if let Err(msg) = res {
-            return Err(msg);
-        }
-
-        let mut epx = res.unwrap();
+        let mut epx = self.factor()?;
         while self.matches_any(vec![Minus, Plus]) {
-            let t = self.prev().unwrap().clone();
-            match self.factor() {
-                Ok(right) => epx = expr::binary(t, epx, right),
-                Err(msg) => return Err(msg),
-            }
+            let token = self.prev().unwrap().clone();
+            epx = expr::binary(token, epx, self.factor()?);
         }
 
         Ok(epx)
@@ -579,18 +512,10 @@ impl<'a> ParseState<'a> {
 
     // *,/
     fn factor(&mut self) -> Result<Expr, String> {
-        let res = self.unary();
-        if let Err(msg) = res {
-            return Err(msg);
-        }
-
-        let mut epx = res.unwrap();
+        let mut epx = self.unary()?;
         while self.matches_any(vec![Slash, Star]) {
-            let t = self.prev().unwrap().clone();
-            match self.unary() {
-                Ok(opr) => epx = expr::binary(t, epx, opr),
-                Err(msg) => return Err(msg),
-            }
+            let token = self.prev().unwrap().clone();
+            epx = expr::binary(token, epx, self.unary()?);
         }
 
         Ok(epx)
@@ -599,12 +524,8 @@ impl<'a> ParseState<'a> {
     // !,-
     fn unary(&mut self) -> Result<Expr, String> {
         if self.matches_any(vec![Bang, Minus]) {
-            let t = self.prev().unwrap().clone();
-
-            return match self.unary() {
-                Ok(opr) => Ok(expr::unary(t, opr)),
-                Err(msg) => Err(msg),
-            };
+            let token = self.prev().unwrap().clone();
+            return self.unary().map(|opr| expr::unary(token, opr));
         }
 
         self.call()
@@ -612,18 +533,10 @@ impl<'a> ParseState<'a> {
 
     // call
     fn call(&mut self) -> Result<Expr, String> {
-        let res = self.primary();
-        if let Err(msg) = res {
-            return Err(msg);
-        }
-
-        let mut epx = res.unwrap();
+        let mut epx = self.primary()?;
         loop {
             if self.matches(LeftParen) {
-                match self.make_call(epx, self.prev().unwrap().clone()) {
-                    Ok(call) => epx = call,
-                    Err(msg) => return Err(msg),
-                };
+                epx = self.make_call(epx, self.prev().unwrap().clone())?;
             } else if self.matches(Dot) {
                 let dot = self.prev().unwrap().clone();
                 if self.matches_identifier() {
@@ -651,10 +564,7 @@ impl<'a> ParseState<'a> {
         }
 
         loop {
-            match self.expr() {
-                Ok(param) => args.push(param),
-                Err(msg) => return Err(msg),
-            }
+            args.push(self.expr()?);
 
             if self.matches(Comma) {
                 continue;

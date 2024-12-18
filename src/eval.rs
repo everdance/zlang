@@ -1,4 +1,3 @@
-use crate::env::{self, Environments, Value};
 use crate::expr;
 use crate::expr::{
     Expr,
@@ -10,12 +9,86 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use std::fmt::Display;
+
+#[derive(Debug, Clone)]
+pub enum Value {
+    Nil,
+    Str(String),
+    Num(f64),
+    Bool(bool),
+    Fun(expr::Fun),
+    Class(HashMap<String, expr::Fun>),
+    Object(String, Rc<RefCell<HashMap<String, Value>>>),
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Value::Nil => "nil".to_string(),
+            Value::Str(s) => s.clone(),
+            Value::Num(num) => num.to_string(),
+            Value::Bool(bl) => bl.to_string(),
+            Value::Fun(fun) => fun.to_string(),
+            Value::Class(cls) => {
+                let mut methods = "".to_string();
+                for (_, m) in cls.iter() {
+                    methods = format!("{},{{{m}}}", methods.as_str());
+                }
+                methods.trim_start_matches(",").to_string()
+            }
+            Value::Object(cls_name, properties) => {
+                let mut obj = format!("object:<class:{cls_name}>{{");
+                for (k, v) in properties.borrow().iter() {
+                    obj = format!("{obj} {k} => {v}")
+                }
+                format!("{obj} }}")
+            }
+        };
+        write!(f, "{s}")
+    }
+}
+
+struct Environments {
+    stack: Vec<HashMap<String, Value>>,
+}
+
+fn new_env() -> Environments {
+    let global = HashMap::new();
+    Environments {
+        stack: vec![global],
+    }
+}
+
+impl Environments {
+    fn push(&mut self, hm: Option<HashMap<String, Value>>) {
+        self.stack.push(hm.unwrap_or_default());
+    }
+
+    fn pop(&mut self) {
+        self.stack.pop();
+    }
+
+    fn get(&self, id: &str) -> Option<&Value> {
+        for ev in self.stack.iter().rev() {
+            if let Some(val) = ev.get(id) {
+                return Some(val);
+            }
+        }
+        None
+    }
+
+    pub fn set(&mut self, id: String, val: Value) {
+        self.stack.last_mut().unwrap().insert(id, val);
+    }
+}
+
 pub struct Eval;
 
 impl Eval {
     pub fn exec(stmts: &[Stmt]) -> Value {
         let mut eval = Evaluator {
-            envs: env::new(),
+            envs: new_env(),
             fstack: vec![],
             printval: None,
         };
@@ -59,10 +132,7 @@ impl Evaluator {
                 self.expr(exp);
             }
             Stmt::Var(name, exp) => {
-                let val = match exp {
-                    Some(epr) => self.expr(epr),
-                    _ => Value::Nil,
-                };
+                let val = exp.as_ref().map_or(Value::Nil, |epr| self.expr(epr));
                 self.envs.set(name.val(), val);
             }
             Stmt::Return(epx) => {
@@ -76,17 +146,11 @@ impl Evaluator {
                 };
             }
             Stmt::If(cond, ifstmt, elsest) => match self.expr(cond) {
-                Value::Bool(true) => {
-                    for st in ifstmt.iter() {
-                        self.stmt(st);
-                    }
-                }
+                Value::Bool(true) => ifstmt.iter().for_each(|st| self.stmt(st)),
                 Value::Bool(false) => {
-                    if let Some(stmts) = elsest {
-                        for st in stmts.iter() {
-                            self.stmt(st);
-                        }
-                    }
+                    elsest
+                        .as_ref()
+                        .map(|stmts| stmts.iter().for_each(|st| self.stmt(st)));
                 }
                 _ => unreachable!(),
             },
@@ -98,9 +162,7 @@ impl Evaluator {
                 stmts.iter().for_each(|st| self.stmt(st));
             },
             Stmt::For(stmt) => {
-                if let Some(st) = &stmt.var {
-                    self.stmt(st);
-                }
+                stmt.var.as_ref().map(|st| self.stmt(st));
 
                 loop {
                     if let Some(cond) = &stmt.cond {
@@ -110,9 +172,7 @@ impl Evaluator {
                         };
                     }
                     stmt.body.iter().for_each(|st| self.stmt(st));
-                    if let Some(incr) = &stmt.incr {
-                        self.stmt(incr);
-                    }
+                    stmt.incr.as_ref().map(|st| self.stmt(st));
                 }
             }
             Stmt::Block(stmts) => stmts.iter().for_each(|st| self.stmt(st)),
