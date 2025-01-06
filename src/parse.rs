@@ -72,6 +72,7 @@ impl<'a> ParseState<'a> {
 
     fn class(&mut self) -> Result<Stmt, String> {
         let name: Token;
+        let mut parent: Option<String> = None;
 
         if self.matches_identifier() {
             name = self.prev().unwrap().clone();
@@ -80,6 +81,17 @@ impl<'a> ParseState<'a> {
                 "expect identifier, got {:?}",
                 self.cur().unwrap().clone()
             ));
+        }
+
+        if self.matches(Extends) {
+            if self.matches_identifier() {
+                parent = Some(self.prev().unwrap().val());
+            } else {
+                return Err(format!(
+                    "expect class parent identifier, got {:?}",
+                    self.cur().unwrap().clone()
+                ));
+            }
         }
 
         if !self.matches(LeftBrace) {
@@ -111,7 +123,11 @@ impl<'a> ParseState<'a> {
             }
         }
 
-        Ok(Stmt::Class(expr::Class { name, methods }))
+        Ok(Stmt::Class(expr::Class {
+            name,
+            parent,
+            methods,
+        }))
     }
 
     fn func(&mut self) -> Result<Stmt, String> {
@@ -885,12 +901,12 @@ mod tests {
 
     #[test]
     fn class_def() {
-        let s = "class Test { fun set(x) { this.x = super.x; return this } }";
+        let s = "class Test extends Object { fun set(x) { this.x = super.x; return this } }";
         match Parser::parse(s) {
             Ok(stmts) => {
                 assert_eq!(
                     to_string(&stmts),
-                    "Class(Test,{Fun(set,<x>,[Assign(Get(This, x), Get(Super, x)),Return(This)])})"
+                    "Class(Test<:Object,{Fun(set,<x>,[Assign(Get(This, x), Get(Super, x)),Return(This)])})"
                 )
             }
             Err(msg) => assert!(false, "parse class err:{}", msg),
