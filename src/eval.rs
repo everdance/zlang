@@ -151,10 +151,6 @@ impl Evaluator {
                 self.envs.set(name.val(), val);
             }
             Stmt::Return(epx) => {
-                // TODO: should move this to parser
-                if self.fstack.len() == 0 {
-                    panic!("unexpected return stmt without function");
-                }
                 *self.fstack.last_mut().unwrap() = FunStack {
                     returned: true,
                     val: self.expr(epx),
