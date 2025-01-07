@@ -25,6 +25,7 @@ impl Parser {
 
         let mut state = ParseState {
             cursor: 0,
+            fun_level: 0,
             tokens: &tokens,
         };
 
@@ -35,6 +36,7 @@ impl Parser {
 struct ParseState<'a> {
     tokens: &'a [Token],
     cursor: usize,
+    fun_level: usize,
 }
 
 impl<'a> ParseState<'a> {
@@ -70,6 +72,7 @@ impl<'a> ParseState<'a> {
 
     fn class(&mut self) -> Result<Stmt, String> {
         let name: Token;
+        let mut parent: Option<String> = None;
 
         if self.matches_identifier() {
             name = self.prev().unwrap().clone();
@@ -78,6 +81,17 @@ impl<'a> ParseState<'a> {
                 "expect identifier, got {:?}",
                 self.cur().unwrap().clone()
             ));
+        }
+
+        if self.matches(Extends) {
+            if self.matches_identifier() {
+                parent = Some(self.prev().unwrap().val());
+            } else {
+                return Err(format!(
+                    "expect class parent identifier, got {:?}",
+                    self.cur().unwrap().clone()
+                ));
+            }
         }
 
         if !self.matches(LeftBrace) {
@@ -109,7 +123,11 @@ impl<'a> ParseState<'a> {
             }
         }
 
-        Ok(Stmt::Class(expr::Class { name, methods }))
+        Ok(Stmt::Class(expr::Class {
+            name,
+            parent,
+            methods,
+        }))
     }
 
     fn func(&mut self) -> Result<Stmt, String> {
@@ -158,8 +176,9 @@ impl<'a> ParseState<'a> {
             ));
         }
 
-        let mut body = vec![];
+        self.fun_level += 1;
 
+        let mut body = vec![];
         loop {
             if self.matches(RightBrace) {
                 break;
@@ -174,6 +193,9 @@ impl<'a> ParseState<'a> {
                 Err(msg) => return Err(msg),
             }
         }
+
+        self.fun_level -= 1;
+
         Ok(Stmt::Fun(expr::Fun { name, params, body }))
     }
 
@@ -385,6 +407,10 @@ impl<'a> ParseState<'a> {
     }
 
     fn retstmt(&mut self) -> Result<Stmt, String> {
+        if self.fun_level == 0 {
+            return Err("Return statement only allowed in function body".to_string());
+        }
+
         let token = self.prev().unwrap().clone();
         self.expr()
             .map(|expr| Stmt::Return(expr))
@@ -763,6 +789,17 @@ mod tests {
     }
 
     #[test]
+    fn return_err() {
+        let s = "if (x == 1) {return true;}";
+        match Parser::parse(s) {
+            Ok(_) => {
+                assert!(false, "should error on unexpected return")
+            }
+            Err(msg) => assert_eq!(msg, "Return statement only allowed in function body"),
+        }
+    }
+
+    #[test]
     fn if_def() {
         let s = "if (x == 1) y = 2;";
         match Parser::parse(s) {
@@ -813,12 +850,12 @@ mod tests {
 
     #[test]
     fn block_def() {
-        let s = "{ var a = 1; if (x == 3) x = y * 2; return x;}";
+        let s = "{ var a = 1; if (x == 3) x = y * 2; }";
         match Parser::parse(s) {
             Ok(stmts) => {
                 assert_eq!(
                     to_string(&stmts),
-                    "Block(Var(a,1),If(DoubleEqual(x, 3),[Assign(x, Star(y, 2))]),Return(x))"
+                    "Block(Var(a,1),If(DoubleEqual(x, 3),[Assign(x, Star(y, 2))]))"
                 )
             }
             Err(msg) => assert!(false, "parse while err:{}", msg),
@@ -864,12 +901,12 @@ mod tests {
 
     #[test]
     fn class_def() {
-        let s = "class Test { fun set(x) { this.x = super.x; return this } }";
+        let s = "class Test extends Object { fun set(x) { this.x = super.x; return this } }";
         match Parser::parse(s) {
             Ok(stmts) => {
                 assert_eq!(
                     to_string(&stmts),
-                    "Class(Test,{Fun(set,<x>,[Assign(Get(This, x), Get(Super, x)),Return(This)])})"
+                    "Class(Test<:Object,{Fun(set,<x>,[Assign(Get(This, x), Get(Super, x)),Return(This)])})"
                 )
             }
             Err(msg) => assert!(false, "parse class err:{}", msg),

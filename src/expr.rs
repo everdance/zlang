@@ -200,6 +200,7 @@ impl fmt::Display for Fun {
 #[derive(Debug, Clone)]
 pub struct Class {
     pub name: Token,
+    pub parent: Option<String>,
     pub methods: HashMap<String, Fun>,
 }
 
@@ -210,7 +211,11 @@ impl fmt::Display for Class {
             methods_str = format!("{},{{{m}}}", methods_str.as_str());
         }
         methods_str = methods_str.trim_start_matches(",").to_string();
-        write!(f, "Class({},{})", self.name.val(), methods_str.as_str())
+        let name = self
+            .parent
+            .as_ref()
+            .map_or(self.name.val(), |p| format!("{}<:{}", self.name.val(), p));
+        write!(f, "Class({},{})", name, methods_str.as_str())
     }
 }
 

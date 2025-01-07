@@ -52,6 +52,7 @@ pub enum Kind {
 
     And,
     Class,
+    Extends,
     Else,
     False,
     Fun,

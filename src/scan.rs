@@ -235,6 +235,7 @@ impl ScanState<'_> {
         let kind = match word.as_str() {
             "and" => And,
             "class" => Class,
+            "extends" => Extends,
             "else" => Else,
             "false" => False,
             "true" => True,
@@ -413,6 +414,6 @@ mod tests {
         let s = "class Car extends Vehicle { Car() {super(); this.type = \"car\";} }";
         let (tokens, issues) = Scanner::scan(s);
         assert_eq!(issues.len(), 0);
-        assert_eq!(to_string(tokens), "Class,Identifier(\"Car\"),Identifier(\"extends\"),Identifier(\"Vehicle\"),LeftBrace,Identifier(\"Car\"),LeftParen,RightParen,LeftBrace,Super,LeftParen,RightParen,Semicolon,This,Dot,Identifier(\"type\"),Equal,StrLiteral(\"car\"),Semicolon,RightBrace,RightBrace");
+        assert_eq!(to_string(tokens), "Class,Identifier(\"Car\"),Extends,Identifier(\"Vehicle\"),LeftBrace,Identifier(\"Car\"),LeftParen,RightParen,LeftBrace,Super,LeftParen,RightParen,Semicolon,This,Dot,Identifier(\"type\"),Equal,StrLiteral(\"car\"),Semicolon,RightBrace,RightBrace");
     }
 }

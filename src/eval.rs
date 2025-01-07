@@ -18,7 +18,7 @@ pub enum Value {
     Num(f64),
     Bool(bool),
     Fun(expr::Fun),
-    Class(HashMap<String, expr::Fun>),
+    Class(HashMap<String, expr::Fun>, Option<String>),
     Object(String, Rc<RefCell<HashMap<String, Value>>>),
 }
 
@@ -30,7 +30,7 @@ impl Display for Value {
             Value::Num(num) => num.to_string(),
             Value::Bool(bl) => bl.to_string(),
             Value::Fun(fun) => fun.to_string(),
-            Value::Class(cls) => {
+            Value::Class(cls, _) => {
                 let mut methods = "".to_string();
                 for (_, m) in cls.iter() {
                     methods = format!("{},{{{m}}}", methods.as_str());
@@ -151,10 +151,6 @@ impl Evaluator {
                 self.envs.set(name.val(), val);
             }
             Stmt::Return(epx) => {
-                // TODO: should move this to parser
-                if self.fstack.len() == 0 {
-                    panic!("unexpected return stmt without function");
-                }
                 *self.fstack.last_mut().unwrap() = FunStack {
                     returned: true,
                     val: self.expr(epx),
@@ -197,7 +193,10 @@ impl Evaluator {
             }
             Stmt::Class(cls) => {
                 let copy = cls.clone();
-                self.envs.set(copy.name.val(), Value::Class(copy.methods));
+                self.envs.set(
+                    copy.name.val(),
+                    Value::Class(copy.methods, cls.parent.clone()),
+                );
             }
             Stmt::Print(exp) => {
                 let val = self.expr(exp);
@@ -242,9 +241,13 @@ impl Evaluator {
                         Kind::GreaterEqual => Value::Bool(x >= y),
                         Kind::Less => Value::Bool(x < y),
                         Kind::LessEqual => Value::Bool(x <= y),
-                        _ => panic!("unexpected binary token"),
+                        _ => panic!("unexpected binary op {} for number", exp.token.kind),
                     },
-                    (_, _) => panic!("unexpected value for binary"),
+                    (Value::Str(x), Value::Str(y)) => match exp.token.kind {
+                        Kind::Plus => Value::Str(x + &y),
+                        _ => panic!("unexpected binary op {} for string", exp.token.kind),
+                    },
+                    (_, _) => panic!("unexpected value for binary operation"),
                 }
             }
             Logical => {
@@ -287,12 +290,7 @@ impl Evaluator {
                 let method_name = callee.right.as_deref().unwrap().token.val();
                 object = self.expr(callee.left.as_deref().unwrap());
                 match &object {
-                    Value::Object(cls, _) => match self.envs.get(&cls) {
-                        Some(Value::Class(cls_obj)) => {
-                            Value::Fun(cls_obj.get(&method_name).unwrap().clone())
-                        }
-                        val => panic!("unexpected class reference:{:?}", val),
-                    },
+                    Value::Object(cls, _) => self.class_method(&cls, &method_name),
                     obj => panic!("cannot call method on non-object entity:{:?}", obj),
                 }
             }
@@ -317,7 +315,7 @@ impl Evaluator {
                 self.stmt(stmt);
             }
             self.exitfun().unwrap().val
-        } else if let Value::Class(_) = method {
+        } else if let Value::Class(_, _) = method {
             Value::Object(callee.token.val(), Rc::new(RefCell::new(HashMap::new())))
         } else {
             panic!("unexpected value for function:{:?}", method)
@@ -334,6 +332,22 @@ impl Evaluator {
                 map.borrow().get(&key).unwrap().clone()
             }
             _ => panic!("unexpected value for get:{:?}", left),
+        }
+    }
+
+    fn class_method(&self, clsname: &str, method: &str) -> Value {
+        match self.envs.get(&clsname) {
+            Some(Value::Class(methods, parent)) => {
+                if let Some(fun) = methods.get(method) {
+                    return Value::Fun(fun.clone());
+                }
+                if let Some(p) = parent {
+                    return self.class_method(p, method);
+                }
+
+                panic!("unknown method call:{}", method)
+            }
+            val => panic!("unexpected class reference:{:?}", val),
         }
     }
 
@@ -411,5 +425,12 @@ mod tests {
         let s = "class Math { fun multiply(x) {return this.val*x;}}; var x = Math(); x.val = 2; print x.multiply(4);";
         let stmts = Parser::parse(s).unwrap();
         assert_eq!(evaluate(&stmts).to_string(), "8");
+    }
+
+    #[test]
+    fn class_extend_expr() {
+        let s = "class Animal { fun say() { return \"hoho\"}}; class Dog extends Animal { fun bark() {return \"dog \" + this.say();}}; var d = Dog(); print d.bark();";
+        let stmts = Parser::parse(s).unwrap();
+        assert_eq!(evaluate(&stmts).to_string(), "dog hoho");
     }
 }
